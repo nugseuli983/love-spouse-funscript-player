@@ -236,11 +236,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if not script_player:
                     response = {"status": "no_script"}
                 elif not script_player.is_alive():
-                    response = {"status": "loaded_not_running"}
+                    response = {"status": "loaded"}
                 elif script_player.paused:
                     response = {"status": "paused"}
                 else:
-                    response = {"status": "playing"}
+                    response = {"status": "started"}
             else:
                 response = {"status": "error", "message": "Unknown action"}
                 
