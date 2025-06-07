@@ -355,41 +355,6 @@
                 });
         });
         
-        // Sample script
-        const sampleScript = {
-            "actions": [
-                {"at": 0, "pos": 20},
-                {"at": 500, "pos": 40},
-                {"at": 1000, "pos": 60},
-                {"at": 1500, "pos": 80},
-                {"at": 2000, "pos": 100},
-                {"at": 2500, "pos": 80},
-                {"at": 3000, "pos": 60},
-                {"at": 3500, "pos": 40},
-                {"at": 4000, "pos": 20},
-                {"at": 4500, "pos": 0}
-            ],
-            "metadata": {
-                "title": "Sample Script",
-                "duration": 5,
-                "description": "A simple test script"
-            },
-            "range": 100,
-            "version": "1.0"
-        };
-        
-        // Add sample script button
-        const addSampleBtn = document.createElement('button');
-        addSampleBtn.textContent = 'Load Sample Script';
-        addSampleBtn.style.backgroundColor = '#9c27b0';
-        addSampleBtn.addEventListener('click', () => {
-            scriptInput.value = JSON.stringify(sampleScript, null, 2);
-            addLog('Sample script loaded to editor', 'success');
-        });
-        
-        // Insert before load button
-        loadBtn.parentNode.insertBefore(addSampleBtn, loadBtn);
-        
         // Check status periodically
         setInterval(updateStatus, 2000);
         
