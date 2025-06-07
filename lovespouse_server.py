@@ -163,6 +163,8 @@ def stop_script():
     
     script_player.stop()
     script_player.join(1)
+    script_player = None
+    
     return {"status": "stopped"}
 
 # 요청 처리 함수
