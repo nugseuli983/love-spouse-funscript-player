@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoveSpouse Script Player</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .container {
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        textarea {
+            width: 100%;
+            height: 300px;
+            margin-bottom: 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            flex-grow: 1;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #loadBtn {
+            background-color: #2196F3;
+        }
+        #loadBtn:hover {
+            background-color: #0b7dda;
+        }
+        #stopBtn {
+            background-color: #f44336;
+        }
+        #stopBtn:hover {
+            background-color: #d32f2f;
+        }
+        #pauseBtn {
+            background-color: #ff9800;
+        }
+        #pauseBtn:hover {
+            background-color: #e68a00;
+        }
+        .status-container {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+        }
+        .mode-selector {
+            margin-bottom: 10px;
+        }
+        select {
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        .log-container {
+            margin-top: 20px;
+            height: 150px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            font-family: monospace;
+        }
+        .log-entry {
+            margin-bottom: 5px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+        }
+        .error {
+            color: #f44336;
+        }
+        .success {
+            color: #4CAF50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LoveSpouse Script Player</h1>
+        
+        <div class="mode-selector">
+            <label for="toyMode">Toy Mode:</label>
+            <select id="toyMode">
+                <option value="shake">Shake</option>
+                <option value="shock1">Shock 1</option>
+                <option value="shock2">Shock 2</option>
+                <option value="telescope">Telescope</option>
+            </select>
+        </div>
+        
+        <textarea id="scriptInput" placeholder="Paste your script JSON here..."></textarea>
+        
+        <div class="controls">
+            <button id="loadBtn">Load Script</button>
+            <button id="startBtn" disabled>Start</button>
+            <button id="pauseBtn" disabled>Pause</button>
+            <button id="stopBtn" disabled>Stop</button>
+        </div>
+        
+        <div class="status-container">
+            <strong>Status:</strong> <span id="statusText">No script loaded</span>
+        </div>
+        
+        <div class="log-container" id="logContainer">
+            <div class="log-entry">Log messages will appear here...</div>
+        </div>
+    </div>
+
+    <script>
+        // Server endpoint
+        const SERVER_URL = 'http://localhost:8080';
+        
+        // DOM elements
+        const scriptInput = document.getElementById('scriptInput');
+        const toyModeSelect = document.getElementById('toyMode');
+        const loadBtn = document.getElementById('loadBtn');
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusText = document.getElementById('statusText');
+        const logContainer = document.getElementById('logContainer');
+        
+        // Add log entry
+        function addLog(message, type = '') {
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+        
+        // Update status
+        function updateStatus() {
+            fetch(`${SERVER_URL}/lovespouse/script?action=status`)
+                .then(response => response.json())
+                .then(data => {
+                    statusText.textContent = data.status;
+                    
+                    // Update button states based on status
+                    if (data.status === 'no_script') {
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = true;
+                        stopBtn.disabled = true;
+                    } else if (data.status === 'loaded_not_running') {
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        stopBtn.disabled = true;
+                    } else if (data.status === 'playing') {
+                        startBtn.disabled = true;
+                        pauseBtn.disabled = false;
+                        stopBtn.disabled = false;
+                    } else if (data.status === 'paused') {
+                        startBtn.disabled = false;
+                        pauseBtn.disabled = true;
+                        stopBtn.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    addLog(`Error checking status: ${error.message}`, 'error');
+                    statusText.textContent = 'Error';
+                });
+        }
+        
+        // Load script
+        loadBtn.addEventListener('click', () => {
+            try {
+                const scriptText = scriptInput.value.trim();
+                if (!scriptText) {
+                    addLog('Please enter a script', 'error');
+                    return;
+                }
+                
+                const scriptData = JSON.parse(scriptText);
+                const toyMode = toyModeSelect.value;
+                
+                fetch(`${SERVER_URL}/lovespouse/script/load`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Toy-Mode': toyMode
+                    },
+                    body: scriptText
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'loaded') {
+                        addLog(`Script loaded with ${data.actions} actions`, 'success');
+                        startBtn.disabled = false;
+                    } else {
+                        addLog(`Error loading script: ${data.message}`, 'error');
+                    }
+                    updateStatus();
+                })
+                .catch(error => {
+                    addLog(`Error loading script: ${error.message}`, 'error');
+                });
+            } catch (error) {
+                addLog(`Invalid JSON format: ${error.message}`, 'error');
+            }
+        });
+        
+        // Start script
+        startBtn.addEventListener('click', () => {
+            fetch(`${SERVER_URL}/lovespouse/script?action=start`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'started' || data.status === 'resumed') {
+                        addLog(`Script ${data.status}`, 'success');
+                    } else {
+                        addLog(`Error starting script: ${data.message}`, 'error');
+                    }
+                    updateStatus();
+                })
+                .catch(error => {
+                    addLog(`Error starting script: ${error.message}`, 'error');
+                });
+        });
+        
+        // Pause script
+        pauseBtn.addEventListener('click', () => {
+            fetch(`${SERVER_URL}/lovespouse/script?action=pause`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'paused') {
+                        addLog('Script paused', 'success');
+                    } else {
+                        addLog(`Error pausing script: ${data.message}`, 'error');
+                    }
+                    updateStatus();
+                })
+                .catch(error => {
+                    addLog(`Error pausing script: ${error.message}`, 'error');
+                });
+        });
+        
+        // Stop script
+        stopBtn.addEventListener('click', () => {
+            fetch(`${SERVER_URL}/lovespouse/script?action=stop`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'stopped') {
+                        addLog('Script stopped', 'success');
+                    } else {
+                        addLog(`Error stopping script: ${data.message}`, 'error');
+                    }
+                    updateStatus();
+                })
+                .catch(error => {
+                    addLog(`Error stopping script: ${error.message}`, 'error');
+                });
+        });
+        
+        // Sample script
+        const sampleScript = {
+            "actions": [
+                {"at": 0, "pos": 20},
+                {"at": 500, "pos": 40},
+                {"at": 1000, "pos": 60},
+                {"at": 1500, "pos": 80},
+                {"at": 2000, "pos": 100},
+                {"at": 2500, "pos": 80},
+                {"at": 3000, "pos": 60},
+                {"at": 3500, "pos": 40},
+                {"at": 4000, "pos": 20},
+                {"at": 4500, "pos": 0}
+            ],
+            "metadata": {
+                "title": "Sample Script",
+                "duration": 5,
+                "description": "A simple test script"
+            },
+            "range": 100,
+            "version": "1.0"
+        };
+        
+        // Add sample script button
+        const addSampleBtn = document.createElement('button');
+        addSampleBtn.textContent = 'Load Sample Script';
+        addSampleBtn.style.backgroundColor = '#9c27b0';
+        addSampleBtn.addEventListener('click', () => {
+            scriptInput.value = JSON.stringify(sampleScript, null, 2);
+            addLog('Sample script loaded to editor', 'success');
+        });
+        
+        // Insert before load button
+        loadBtn.parentNode.insertBefore(addSampleBtn, loadBtn);
+        
+        // Check status periodically
+        setInterval(updateStatus, 2000);
+        
+        // Initial status check
+        updateStatus();
+    </script>
