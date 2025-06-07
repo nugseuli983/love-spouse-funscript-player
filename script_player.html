@@ -53,12 +53,6 @@
             background-color: #cccccc;
             cursor: not-allowed;
         }
-        #loadBtn {
-            background-color: #2196F3;
-        }
-        #loadBtn:hover {
-            background-color: #0b7dda;
-        }
         #stopBtn {
             background-color: #f44336;
         }
@@ -115,14 +109,14 @@
         }
         .file-label {
             padding: 10px 15px;
-            background-color: #673ab7;
+            background-color: #2196F3;
             color: white;
             border-radius: 4px;
             cursor: pointer;
             display: inline-block;
         }
         .file-label:hover {
-            background-color: #5e35b1;
+            background-color: #0b7dda;
         }
         #fileName {
             flex-grow: 1;
@@ -156,10 +150,9 @@
             <span id="fileName">No file selected</span>
         </div>
         
-        <textarea id="scriptInput" placeholder="Paste your script JSON here..."></textarea>
+        <textarea id="scriptInput" placeholder="Script content will appear here after selecting a file..."></textarea>
         
         <div class="controls">
-            <button id="loadBtn">Load Script</button>
             <button id="startBtn" disabled>Start</button>
             <button id="pauseBtn" disabled>Pause</button>
             <button id="stopBtn" disabled>Stop</button>
@@ -181,7 +174,6 @@
         // DOM elements
         const scriptInput = document.getElementById('scriptInput');
         const toyModeSelect = document.getElementById('toyMode');
-        const loadBtn = document.getElementById('loadBtn');
         const startBtn = document.getElementById('startBtn');
         const pauseBtn = document.getElementById('pauseBtn');
         const stopBtn = document.getElementById('stopBtn');
@@ -231,12 +223,11 @@
                 });
         }
         
-        // Load script from text area
-        function loadScriptFromText() {
+        // Load script to server
+        function loadScriptToServer(scriptText) {
             try {
-                const scriptText = scriptInput.value.trim();
                 if (!scriptText) {
-                    addLog('Please enter a script', 'error');
+                    addLog('Script content is empty', 'error');
                     return;
                 }
                 
@@ -290,7 +281,10 @@
                     const fileContent = e.target.result;
                     const scriptData = JSON.parse(fileContent);
                     scriptInput.value = JSON.stringify(scriptData, null, 2);
-                    addLog(`File "${file.name}" loaded to editor`, 'success');
+                    addLog(`File "${file.name}" loaded`, 'success');
+                    
+                    // Automatically load the script to the server
+                    loadScriptToServer(fileContent);
                 } catch (error) {
                     addLog(`Error parsing file: ${error.message}`, 'error');
                 }
@@ -300,9 +294,6 @@
             };
             reader.readAsText(file);
         });
-        
-        // Load script button
-        loadBtn.addEventListener('click', loadScriptFromText);
         
         // Start script
         startBtn.addEventListener('click', () => {
