@@ -192,7 +192,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-type", content_type)
         self.send_header("Access-Control-Allow-Origin", "*")  # CORS 허용
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Toy-Mode")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
     def do_OPTIONS(self):

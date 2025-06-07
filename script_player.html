@@ -107,6 +107,33 @@
         .success {
             color: #4CAF50;
         }
+        .file-upload {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .file-label {
+            padding: 10px 15px;
+            background-color: #673ab7;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            display: inline-block;
+        }
+        .file-label:hover {
+            background-color: #5e35b1;
+        }
+        #fileName {
+            flex-grow: 1;
+            padding: 8px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     </style>
 </head>
 <body>
@@ -121,6 +148,12 @@
                 <option value="shock2">Shock 2</option>
                 <option value="telescope">Telescope</option>
             </select>
+        </div>
+        
+        <div class="file-upload">
+            <label for="scriptFile" class="file-label">Choose Funscript File</label>
+            <input type="file" id="scriptFile" accept=".funscript" style="display: none;">
+            <span id="fileName">No file selected</span>
         </div>
         
         <textarea id="scriptInput" placeholder="Paste your script JSON here..."></textarea>
@@ -154,6 +187,8 @@
         const stopBtn = document.getElementById('stopBtn');
         const statusText = document.getElementById('statusText');
         const logContainer = document.getElementById('logContainer');
+        const scriptFileInput = document.getElementById('scriptFile');
+        const fileNameDisplay = document.getElementById('fileName');
         
         // Add log entry
         function addLog(message, type = '') {
@@ -196,8 +231,8 @@
                 });
         }
         
-        // Load script
-        loadBtn.addEventListener('click', () => {
+        // Load script from text area
+        function loadScriptFromText() {
             try {
                 const scriptText = scriptInput.value.trim();
                 if (!scriptText) {
@@ -232,7 +267,42 @@
             } catch (error) {
                 addLog(`Invalid JSON format: ${error.message}`, 'error');
             }
+        }
+        
+        // Handle file selection
+        scriptFileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            // Check if file has .funscript extension
+            if (!file.name.toLowerCase().endsWith('.funscript')) {
+                addLog('Only .funscript files are allowed', 'error');
+                scriptFileInput.value = '';
+                fileNameDisplay.textContent = 'No file selected';
+                return;
+            }
+            
+            fileNameDisplay.textContent = file.name;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const fileContent = e.target.result;
+                    const scriptData = JSON.parse(fileContent);
+                    scriptInput.value = JSON.stringify(scriptData, null, 2);
+                    addLog(`File "${file.name}" loaded to editor`, 'success');
+                } catch (error) {
+                    addLog(`Error parsing file: ${error.message}`, 'error');
+                }
+            };
+            reader.onerror = () => {
+                addLog('Error reading file', 'error');
+            };
+            reader.readAsText(file);
         });
+        
+        // Load script button
+        loadBtn.addEventListener('click', loadScriptFromText);
         
         // Start script
         startBtn.addEventListener('click', () => {
@@ -326,3 +396,5 @@
         // Initial status check
         updateStatus();
     </script>
+</body>
+</html>
