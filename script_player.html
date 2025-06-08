@@ -59,10 +59,16 @@
         #stopBtn:hover {
             background-color: #d32f2f;
         }
-        #pauseBtn {
+        #toggleBtn.play {
+            background-color: #4CAF50;
+        }
+        #toggleBtn.play:hover {
+            background-color: #45a049;
+        }
+        #toggleBtn.pause {
             background-color: #ff9800;
         }
-        #pauseBtn:hover {
+        #toggleBtn.pause:hover {
             background-color: #e68a00;
         }
         .status-container {
@@ -153,8 +159,7 @@
         <textarea id="scriptInput" placeholder="Script content will appear here after selecting a file..."></textarea>
         
         <div class="controls">
-            <button id="startBtn" disabled>Start</button>
-            <button id="pauseBtn" disabled>Pause</button>
+            <button id="toggleBtn" class="play" disabled>Start</button>
             <button id="stopBtn" disabled>Stop</button>
         </div>
         
@@ -174,8 +179,7 @@
         // DOM elements
         const scriptInput = document.getElementById('scriptInput');
         const toyModeSelect = document.getElementById('toyMode');
-        const startBtn = document.getElementById('startBtn');
-        const pauseBtn = document.getElementById('pauseBtn');
+        const toggleBtn = document.getElementById('toggleBtn');
         const stopBtn = document.getElementById('stopBtn');
         const statusText = document.getElementById('statusText');
         const logContainer = document.getElementById('logContainer');
@@ -208,23 +212,27 @@
             
             switch (currentState) {
                 case PlayerState.NO_SCRIPT:
-                    startBtn.disabled = true;
-                    pauseBtn.disabled = true;
+                    toggleBtn.disabled = true;
+                    toggleBtn.textContent = 'Start';
+                    toggleBtn.className = 'play';
                     stopBtn.disabled = true;
                     break;
                 case PlayerState.LOADED:
-                    startBtn.disabled = false;
-                    pauseBtn.disabled = true;
+                    toggleBtn.disabled = false;
+                    toggleBtn.textContent = 'Start';
+                    toggleBtn.className = 'play';
                     stopBtn.disabled = false;
                     break;
                 case PlayerState.PLAYING:
-                    startBtn.disabled = true;
-                    pauseBtn.disabled = false;
+                    toggleBtn.disabled = false;
+                    toggleBtn.textContent = 'Pause';
+                    toggleBtn.className = 'pause';
                     stopBtn.disabled = false;
                     break;
                 case PlayerState.PAUSED:
-                    startBtn.disabled = false;
-                    pauseBtn.disabled = true;
+                    toggleBtn.disabled = false;
+                    toggleBtn.textContent = 'Resume';
+                    toggleBtn.className = 'play';
                     stopBtn.disabled = false;
                     break;
             }
@@ -312,7 +320,7 @@
         });
         
         // Start script
-        startBtn.addEventListener('click', () => {
+        function startScript() {
             fetch(`${SERVER_URL}/lovespouse/script?action=start`)
                 .then(response => response.json())
                 .then(data => {
@@ -331,10 +339,10 @@
                 .catch(error => {
                     addLog(`Error starting script: ${error.message}`, 'error');
                 });
-        });
+        }
         
         // Pause script
-        pauseBtn.addEventListener('click', () => {
+        function pauseScript() {
             fetch(`${SERVER_URL}/lovespouse/script?action=pause`)
                 .then(response => response.json())
                 .then(data => {
@@ -349,13 +357,21 @@
                 .catch(error => {
                     addLog(`Error pausing script: ${error.message}`, 'error');
                 });
+        }
+        
+        // Toggle button handler
+        toggleBtn.addEventListener('click', () => {
+            if (currentState === PlayerState.PLAYING) {
+                pauseScript();
+            } else {
+                startScript();
+            }
         });
         
         // Stop script
         stopBtn.addEventListener('click', () => {
             // Immediately disable buttons
-            startBtn.disabled = true;
-            pauseBtn.disabled = true;
+            toggleBtn.disabled = true;
             stopBtn.disabled = true;
             
             fetch(`${SERVER_URL}/lovespouse/script?action=stop`)
