@@ -39,30 +39,16 @@
         }
         button {
             padding: 10px 15px;
-            background-color: #4CAF50;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             flex-grow: 1;
         }
-        button:hover {
-            background-color: #45a049;
-        }
-        button:disabled {
-            background-color: #cccccc;
-            cursor: not-allowed;
-        }
-        #stopBtn {
-            background-color: #f44336;
-        }
-        #stopBtn:hover {
-            background-color: #d32f2f;
-        }
-        #toggleBtn.play {
+        #toggleBtn {
             background-color: #4CAF50;
         }
-        #toggleBtn.play:hover {
+        #toggleBtn:hover {
             background-color: #45a049;
         }
         #toggleBtn.pause {
@@ -71,8 +57,15 @@
         #toggleBtn.pause:hover {
             background-color: #e68a00;
         }
+        #stopBtn {
+            background-color: #f44336;
+        }
+        #stopBtn:hover {
+            background-color: #d32f2f;
+        }
         #toggleBtn:disabled, #stopBtn:disabled {
             background-color: #cccccc !important;
+            cursor: not-allowed;
         }
         .status-container {
             margin-top: 20px;
@@ -176,95 +169,67 @@
     </div>
 
     <script>
-        // Server endpoint
         const SERVER_URL = 'http://localhost:8080';
-        
-        // DOM elements
-        const scriptInput = document.getElementById('scriptInput');
-        const toyModeSelect = document.getElementById('toyMode');
-        const toggleBtn = document.getElementById('toggleBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const statusText = document.getElementById('statusText');
-        const logContainer = document.getElementById('logContainer');
-        const scriptFileInput = document.getElementById('scriptFile');
-        const fileNameDisplay = document.getElementById('fileName');
-        
-        // Player state
+        const elements = {
+            scriptInput: document.getElementById('scriptInput'),
+            toyModeSelect: document.getElementById('toyMode'),
+            toggleBtn: document.getElementById('toggleBtn'),
+            stopBtn: document.getElementById('stopBtn'),
+            statusText: document.getElementById('statusText'),
+            logContainer: document.getElementById('logContainer'),
+            scriptFileInput: document.getElementById('scriptFile'),
+            fileNameDisplay: document.getElementById('fileName')
+        };
+
         const PlayerState = {
             NO_SCRIPT: 'No script loaded',
             LOADED: 'Script loaded',
             PLAYING: 'Playing',
             PAUSED: 'Paused'
         };
-        
-        // Current state
+
         let currentState = PlayerState.NO_SCRIPT;
-        
-        // Add log entry
+
         function addLog(message, type = '') {
             const logEntry = document.createElement('div');
             logEntry.className = `log-entry ${type}`;
             logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            logContainer.appendChild(logEntry);
-            logContainer.scrollTop = logContainer.scrollHeight;
+            elements.logContainer.appendChild(logEntry);
+            elements.logContainer.scrollTop = elements.logContainer.scrollHeight;
         }
-        
-        // Update UI based on current state
+
         function updateUI() {
-            statusText.textContent = currentState;
-            
-            switch (currentState) {
-                case PlayerState.NO_SCRIPT:
-                    toggleBtn.disabled = true;
-                    toggleBtn.textContent = '▶';
-                    toggleBtn.className = 'play';
-                    stopBtn.disabled = true;
-                    stopBtn.textContent = '⏹';
-                    break;
-                case PlayerState.LOADED:
-                    toggleBtn.disabled = false;
-                    toggleBtn.textContent = '▶';
-                    toggleBtn.className = 'play';
-                    stopBtn.disabled = false;
-                    stopBtn.textContent = '⏹';
-                    break;
-                case PlayerState.PLAYING:
-                    toggleBtn.disabled = false;
-                    toggleBtn.textContent = '⏸';
-                    toggleBtn.className = 'pause';
-                    stopBtn.disabled = false;
-                    stopBtn.textContent = '⏹';
-                    break;
-                case PlayerState.PAUSED:
-                    toggleBtn.disabled = false;
-                    toggleBtn.textContent = '▶';
-                    toggleBtn.className = 'play';
-                    stopBtn.disabled = false;
-                    stopBtn.textContent = '⏹';
-                    break;
-            }
+            elements.statusText.textContent = currentState;
+            const buttonStates = {
+                [PlayerState.NO_SCRIPT]: { toggleDisabled: true, toggleText: '▶', toggleClass: 'play', stopDisabled: true },
+                [PlayerState.LOADED]: { toggleDisabled: false, toggleText: '▶', toggleClass: 'play', stopDisabled: false },
+                [PlayerState.PLAYING]: { toggleDisabled: false, toggleText: '⏸', toggleClass: 'pause', stopDisabled: false },
+                [PlayerState.PAUSED]: { toggleDisabled: false, toggleText: '▶', toggleClass: 'play', stopDisabled: false }
+            };
+            const state = buttonStates[currentState];
+            elements.toggleBtn.disabled = state.toggleDisabled;
+            elements.toggleBtn.textContent = state.toggleText;
+            elements.toggleBtn.className = state.toggleClass;
+            elements.stopBtn.disabled = state.stopDisabled;
+            elements.stopBtn.textContent = '⏹';
         }
-        
-        // Reset to initial state
+
         function resetToInitial() {
-            scriptInput.value = '';
-            fileNameDisplay.textContent = 'No file selected';
-            scriptFileInput.value = '';
+            elements.scriptInput.value = '';
+            elements.fileNameDisplay.textContent = 'No file selected';
+            elements.scriptFileInput.value = '';
             currentState = PlayerState.NO_SCRIPT;
             updateUI();
         }
-        
-        // Load script to server
+
         function loadScriptToServer(scriptText) {
             try {
                 if (!scriptText) {
                     addLog('Script content is empty', 'error');
                     return;
                 }
-                
                 const scriptData = JSON.parse(scriptText);
-                const toyMode = toyModeSelect.value;
-                
+                const toyMode = elements.toyModeSelect.value;
                 fetch(`${SERVER_URL}/lovespouse/script/load`, {
                     method: 'POST',
                     headers: {
@@ -283,124 +248,104 @@
                         addLog(`Error loading script: ${data.message}`, 'error');
                     }
                 })
-                .catch(error => {
-                    addLog(`Error loading script: ${error.message}`, 'error');
-                });
+                .catch(error => addLog(`Error loading script: ${error.message}`, 'error'));
             } catch (error) {
                 addLog(`Invalid JSON format: ${error.message}`, 'error');
             }
         }
-        
-        // Handle file selection
-        scriptFileInput.addEventListener('change', (event) => {
+
+        function handleFileSelection(event) {
             const file = event.target.files[0];
             if (!file) return;
-            
-            // Check if file has .funscript extension
             if (!file.name.toLowerCase().endsWith('.funscript')) {
                 addLog('Only .funscript files are allowed', 'error');
-                scriptFileInput.value = '';
-                fileNameDisplay.textContent = 'No file selected';
+                elements.scriptFileInput.value = '';
+                elements.fileNameDisplay.textContent = 'No file selected';
                 return;
             }
-            
-            fileNameDisplay.textContent = file.name;
-            
+            elements.fileNameDisplay.textContent = file.name;
             const reader = new FileReader();
-            reader.onload = (e) => {
+            reader.onload = e => {
                 try {
                     const fileContent = e.target.result;
-                    const scriptData = JSON.parse(fileContent);
-                    scriptInput.value = JSON.stringify(scriptData, null, 2);
+                    JSON.parse(fileContent);
+                    elements.scriptInput.value = JSON.stringify(JSON.parse(fileContent), null, 2);
                     addLog(`File "${file.name}" loaded`, 'success');
-                    
-                    // Automatically load the script to the server
                     loadScriptToServer(fileContent);
                 } catch (error) {
                     addLog(`Error parsing file: ${error.message}`, 'error');
                 }
             };
-            reader.onerror = () => {
-                addLog('Error reading file', 'error');
-            };
+            reader.onerror = () => addLog('Error reading file', 'error');
             reader.readAsText(file);
-        });
-        
-        // Start script
-        function startScript() {
-            fetch(`${SERVER_URL}/lovespouse/script?action=start`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'started' || data.status === 'resumed') {
-                        addLog(`Script ${data.status}`, 'success');
-                        currentState = PlayerState.PLAYING;
-                        updateUI();
-                    } else if (data.status === 'already_running') {
-                        addLog('Script is already running', 'success');
-                        currentState = PlayerState.PLAYING;
-                        updateUI();
-                    } else {
-                        addLog(`Error starting script: ${data.message}`, 'error');
-                    }
-                })
-                .catch(error => {
-                    addLog(`Error starting script: ${error.message}`, 'error');
-                });
         }
-        
-        // Pause script
-        function pauseScript() {
-            fetch(`${SERVER_URL}/lovespouse/script?action=pause`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'paused') {
-                        addLog('Script paused', 'success');
-                        currentState = PlayerState.PAUSED;
-                        updateUI();
-                    } else {
-                        addLog(`Error pausing script: ${data.message}`, 'error');
-                    }
-                })
-                .catch(error => {
-                    addLog(`Error pausing script: ${error.message}`, 'error');
-                });
+
+        async function startScript() {
+            try {
+                const response = await fetch(`${SERVER_URL}/lovespouse/script?action=start`);
+                const data = await response.json();
+                if (data.status === 'started' || data.status === 'resumed') {
+                    addLog(`Script ${data.status}`, 'success');
+                    currentState = PlayerState.PLAYING;
+                    updateUI();
+                } else if (data.status === 'already_running') {
+                    addLog('Script is already running', 'success');
+                    currentState = PlayerState.PLAYING;
+                    updateUI();
+                } else {
+                    addLog(`Error starting script: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`Error starting script: ${error.message}`, 'error');
+            }
         }
-        
-        // Toggle button handler
-        toggleBtn.addEventListener('click', () => {
+
+        async function pauseScript() {
+            try {
+                const response = await fetch(`${SERVER_URL}/lovespouse/script?action=pause`);
+                const data = await response.json();
+                if (data.status === 'paused') {
+                    addLog('Script paused', 'success');
+                    currentState = PlayerState.PAUSED;
+                    updateUI();
+                } else {
+                    addLog(`Error pausing script: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                addLog(`Error pausing script: ${error.message}`, 'error');
+            }
+        }
+
+        async function stopScript() {
+            elements.toggleBtn.disabled = true;
+            elements.stopBtn.disabled = true;
+            try {
+                const response = await fetch(`${SERVER_URL}/lovespouse/script?action=stop`);
+                const data = await response.json();
+                if (data.status === 'stopped') {
+                    addLog('Script stopped', 'success');
+                    resetToInitial();
+                } else {
+                    addLog(`Error stopping script: ${data.message}`, 'error');
+                    updateUI();
+                }
+            } catch (error) {
+                addLog(`Error stopping script: ${error.message}`, 'error');
+                updateUI();
+            }
+        }
+
+        elements.toggleBtn.addEventListener('click', () => {
             if (currentState === PlayerState.PLAYING) {
                 pauseScript();
             } else {
                 startScript();
             }
         });
-        
-        // Stop script
-        stopBtn.addEventListener('click', () => {
-            // Immediately disable buttons
-            toggleBtn.disabled = true;
-            stopBtn.disabled = true;
-            
-            fetch(`${SERVER_URL}/lovespouse/script?action=stop`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'stopped') {
-                        addLog('Script stopped', 'success');
-                        resetToInitial();
-                    } else {
-                        addLog(`Error stopping script: ${data.message}`, 'error');
-                        // If error, revert to previous state
-                        updateUI();
-                    }
-                })
-                .catch(error => {
-                    addLog(`Error stopping script: ${error.message}`, 'error');
-                    // If error, revert to previous state
-                    updateUI();
-                });
-        });
-        
-        // Initial UI update
+
+        elements.stopBtn.addEventListener('click', stopScript);
+        elements.scriptFileInput.addEventListener('change', handleFileSelection);
+
         updateUI();
     </script>
 </body>
