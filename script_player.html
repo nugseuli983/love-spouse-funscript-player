@@ -159,8 +159,8 @@
         <textarea id="scriptInput" placeholder="Script content will appear here after selecting a file..."></textarea>
         
         <div class="controls">
-            <button id="toggleBtn" class="play" disabled>Start</button>
-            <button id="stopBtn" disabled>Stop</button>
+            <button id="toggleBtn" class="play" disabled>▶</button>
+            <button id="stopBtn" disabled>⏹</button>
         </div>
         
         <div class="status-container">
@@ -213,27 +213,31 @@
             switch (currentState) {
                 case PlayerState.NO_SCRIPT:
                     toggleBtn.disabled = true;
-                    toggleBtn.textContent = 'Start';
+                    toggleBtn.textContent = '▶';
                     toggleBtn.className = 'play';
                     stopBtn.disabled = true;
+                    stopBtn.textContent = '⏹';
                     break;
                 case PlayerState.LOADED:
                     toggleBtn.disabled = false;
-                    toggleBtn.textContent = 'Start';
+                    toggleBtn.textContent = '▶';
                     toggleBtn.className = 'play';
                     stopBtn.disabled = false;
+                    stopBtn.textContent = '⏹';
                     break;
                 case PlayerState.PLAYING:
                     toggleBtn.disabled = false;
-                    toggleBtn.textContent = 'Pause';
+                    toggleBtn.textContent = '⏸';
                     toggleBtn.className = 'pause';
                     stopBtn.disabled = false;
+                    stopBtn.textContent = '⏹';
                     break;
                 case PlayerState.PAUSED:
                     toggleBtn.disabled = false;
-                    toggleBtn.textContent = 'Resume';
+                    toggleBtn.textContent = '▶';
                     toggleBtn.className = 'play';
                     stopBtn.disabled = false;
+                    stopBtn.textContent = '⏹';
                     break;
             }
         }
