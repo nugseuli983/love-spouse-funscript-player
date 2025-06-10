@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: Arial, sans-serif;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
             padding: 20px;
             background-color: #f5f5f5;
@@ -22,9 +22,29 @@
             padding: 20px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+        .video-container {
+            width: 100%;
+            margin-bottom: 20px;
+            background-color: #000;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        video {
+            width: 100%;
+            display: block;
+        }
+        .no-video {
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-style: italic;
+        }
         textarea {
             width: 100%;
-            height: 300px;
+            height: 200px;
             margin-bottom: 10px;
             padding: 10px;
             border: 1px solid #ddd;
@@ -73,6 +93,20 @@
             border: 1px solid #ddd;
             border-radius: 4px;
             background-color: #f9f9f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .sync-indicator {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: white;
+            background-color: #999;
+        }
+        .sync-indicator.active {
+            background-color: #4CAF50;
         }
         .mode-selector {
             margin-bottom: 10px;
@@ -103,6 +137,9 @@
         .success {
             color: #4CAF50;
         }
+        .info {
+            color: #2196F3;
+        }
         .file-upload {
             margin-bottom: 15px;
             display: flex;
@@ -120,7 +157,7 @@
         .file-label:hover {
             background-color: #0b7dda;
         }
-        #fileName {
+        .file-name {
             flex-grow: 1;
             padding: 8px;
             background-color: #f9f9f9;
@@ -129,6 +166,36 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+        .file-uploads {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 5px;
+            background-color: #ddd;
+            border-radius: 2px;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .time-display {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -146,10 +213,27 @@
             </select>
         </div>
         
-        <div class="file-upload">
-            <label for="scriptFile" class="file-label">Choose Funscript File</label>
-            <input type="file" id="scriptFile" accept=".funscript" style="display: none;">
-            <span id="fileName">No file selected</span>
+        <div class="file-uploads">
+            <div class="file-upload">
+                <label for="videoFile" class="file-label">Choose Video File</label>
+                <input type="file" id="videoFile" accept="video/*" style="display: none;">
+                <span id="videoFileName" class="file-name">No video selected</span>
+            </div>
+            
+            <div class="file-upload">
+                <label for="scriptFile" class="file-label">Choose Funscript File</label>
+                <input type="file" id="scriptFile" accept=".funscript" style="display: none;">
+                <span id="scriptFileName" class="file-name">No script selected</span>
+            </div>
+        </div>
+        
+        <div class="video-container">
+            <div id="noVideoMessage" class="no-video">No video loaded</div>
+            <video id="videoPlayer" controls style="display: none;"></video>
+            <div id="timeDisplay" class="time-display" style="display: none;">00:00 / 00:00</div>
+            <div class="progress-bar">
+                <div id="progressBar" class="progress"></div>
+            </div>
         </div>
         
         <textarea id="scriptInput" placeholder="Script content will appear here after selecting a file..."></textarea>
@@ -160,7 +244,10 @@
         </div>
         
         <div class="status-container">
-            <strong>Status:</strong> <span id="statusText">No script loaded</span>
+            <div>
+                <strong>Status:</strong> <span id="statusText">No script loaded</span>
+            </div>
+            <div class="sync-indicator" id="syncIndicator">Video Sync</div>
         </div>
         
         <div class="log-container" id="logContainer">
@@ -178,7 +265,14 @@
             statusText: document.getElementById('statusText'),
             logContainer: document.getElementById('logContainer'),
             scriptFileInput: document.getElementById('scriptFile'),
-            fileNameDisplay: document.getElementById('fileName')
+            scriptFileName: document.getElementById('scriptFileName'),
+            videoFileInput: document.getElementById('videoFile'),
+            videoFileName: document.getElementById('videoFileName'),
+            videoPlayer: document.getElementById('videoPlayer'),
+            noVideoMessage: document.getElementById('noVideoMessage'),
+            progressBar: document.getElementById('progressBar'),
+            timeDisplay: document.getElementById('timeDisplay'),
+            syncIndicator: document.getElementById('syncIndicator')
         };
 
         const PlayerState = {
@@ -189,6 +283,11 @@
         };
 
         let currentState = PlayerState.NO_SCRIPT;
+        let scriptData = null;
+        let videoLoaded = false;
+        let scriptLoaded = false;
+        let videoSyncActive = false;
+        let videoSyncInterval = null;
 
         function addLog(message, type = '') {
             const logEntry = document.createElement('div');
@@ -212,14 +311,46 @@
             elements.toggleBtn.className = state.toggleClass;
             elements.stopBtn.disabled = state.stopDisabled;
             elements.stopBtn.textContent = '⏹';
+            
+            // Update sync indicator
+            if (videoSyncActive) {
+                elements.syncIndicator.classList.add('active');
+            } else {
+                elements.syncIndicator.classList.remove('active');
+            }
         }
 
         function resetToInitial() {
             elements.scriptInput.value = '';
-            elements.fileNameDisplay.textContent = 'No file selected';
+            elements.scriptFileName.textContent = 'No script selected';
             elements.scriptFileInput.value = '';
+            elements.videoFileName.textContent = 'No video selected';
+            elements.videoFileInput.value = '';
+            elements.videoPlayer.style.display = 'none';
+            elements.noVideoMessage.style.display = 'flex';
+            elements.videoPlayer.src = '';
+            elements.progressBar.style.width = '0%';
+            elements.timeDisplay.style.display = 'none';
             currentState = PlayerState.NO_SCRIPT;
+            scriptData = null;
+            videoLoaded = false;
+            scriptLoaded = false;
+            stopVideoSync();
             updateUI();
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = Math.floor(seconds % 60);
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateTimeDisplay() {
+            if (videoLoaded && elements.videoPlayer.duration) {
+                const currentTime = elements.videoPlayer.currentTime;
+                const duration = elements.videoPlayer.duration;
+                elements.timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
+            }
         }
 
         function loadScriptToServer(scriptText) {
@@ -228,7 +359,8 @@
                     addLog('Script content is empty', 'error');
                     return;
                 }
-                const scriptData = JSON.parse(scriptText);
+                const parsedScript = JSON.parse(scriptText);
+                scriptData = parsedScript;
                 const toyMode = elements.toyModeSelect.value;
                 fetch(`${SERVER_URL}/lovespouse/script/load`, {
                     method: 'POST',
@@ -242,6 +374,7 @@
                 .then(data => {
                     if (data.status === 'loaded') {
                         addLog(`Script loaded with ${data.actions} actions`, 'success');
+                        scriptLoaded = true;
                         currentState = PlayerState.LOADED;
                         updateUI();
                     } else {
@@ -254,34 +387,81 @@
             }
         }
 
-        function handleFileSelection(event) {
+        function getFileNameWithoutExtension(filename) {
+            return filename.split('.').slice(0, -1).join('.');
+        }
+
+        function handleScriptFileSelection(event) {
             const file = event.target.files[0];
             if (!file) return;
+            
             if (!file.name.toLowerCase().endsWith('.funscript')) {
                 addLog('Only .funscript files are allowed', 'error');
                 elements.scriptFileInput.value = '';
-                elements.fileNameDisplay.textContent = 'No file selected';
+                elements.scriptFileName.textContent = 'No script selected';
                 return;
             }
-            elements.fileNameDisplay.textContent = file.name;
+            
+            elements.scriptFileName.textContent = file.name;
+            
             const reader = new FileReader();
             reader.onload = e => {
                 try {
                     const fileContent = e.target.result;
                     JSON.parse(fileContent);
                     elements.scriptInput.value = JSON.stringify(JSON.parse(fileContent), null, 2);
-                    addLog(`File "${file.name}" loaded`, 'success');
+                    addLog(`Script "${file.name}" loaded`, 'success');
                     loadScriptToServer(fileContent);
+                    
+                    // Check if there's a matching video file
+                    const baseFileName = getFileNameWithoutExtension(file.name);
+                    if (!videoLoaded) {
+                        addLog(`Looking for matching video file with name: ${baseFileName}.*`, 'info');
+                    }
                 } catch (error) {
-                    addLog(`Error parsing file: ${error.message}`, 'error');
+                    addLog(`Error parsing script file: ${error.message}`, 'error');
                 }
             };
-            reader.onerror = () => addLog('Error reading file', 'error');
+            reader.onerror = () => addLog('Error reading script file', 'error');
             reader.readAsText(file);
         }
 
-        async function startScript() {
+        function handleVideoFileSelection(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            elements.videoFileName.textContent = file.name;
+            
+            // Create object URL for the video
+            const videoURL = URL.createObjectURL(file);
+            elements.videoPlayer.src = videoURL;
+            elements.videoPlayer.style.display = 'block';
+            elements.noVideoMessage.style.display = 'none';
+            elements.timeDisplay.style.display = 'block';
+            videoLoaded = true;
+            
+            addLog(`Video "${file.name}" loaded`, 'success');
+            
+            // Check if there's a matching script file
+            const baseFileName = getFileNameWithoutExtension(file.name);
+            if (!scriptLoaded) {
+                addLog(`Looking for matching script file with name: ${baseFileName}.funscript`, 'info');
+            }
+        }
+
+        async function startPlayback() {
             try {
+                // Start video if available
+                if (videoLoaded) {
+                    try {
+                        await elements.videoPlayer.play();
+                        startVideoSync();
+                    } catch (error) {
+                        addLog(`Error playing video: ${error.message}`, 'error');
+                    }
+                }
+                
+                // Start script
                 const response = await fetch(`${SERVER_URL}/lovespouse/script?action=start`);
                 const data = await response.json();
                 if (data.status === 'started' || data.status === 'resumed') {
@@ -296,12 +476,19 @@
                     addLog(`Error starting script: ${data.message}`, 'error');
                 }
             } catch (error) {
-                addLog(`Error starting script: ${error.message}`, 'error');
+                addLog(`Error starting playback: ${error.message}`, 'error');
             }
         }
 
-        async function pauseScript() {
+        async function pausePlayback() {
             try {
+                // Pause video if available
+                if (videoLoaded) {
+                    elements.videoPlayer.pause();
+                    stopVideoSync();
+                }
+                
+                // Pause script
                 const response = await fetch(`${SERVER_URL}/lovespouse/script?action=pause`);
                 const data = await response.json();
                 if (data.status === 'paused') {
@@ -312,40 +499,150 @@
                     addLog(`Error pausing script: ${data.message}`, 'error');
                 }
             } catch (error) {
-                addLog(`Error pausing script: ${error.message}`, 'error');
+                addLog(`Error pausing playback: ${error.message}`, 'error');
             }
         }
 
-        async function stopScript() {
+        async function stopPlayback() {
             elements.toggleBtn.disabled = true;
             elements.stopBtn.disabled = true;
+            
             try {
+                // Stop video if available
+                if (videoLoaded) {
+                    elements.videoPlayer.pause();
+                    elements.videoPlayer.currentTime = 0;
+                    stopVideoSync();
+                }
+                
+                // Stop script
                 const response = await fetch(`${SERVER_URL}/lovespouse/script?action=stop`);
                 const data = await response.json();
                 if (data.status === 'stopped') {
                     addLog('Script stopped', 'success');
-                    resetToInitial();
+                    currentState = PlayerState.LOADED;
+                    updateUI();
                 } else {
                     addLog(`Error stopping script: ${data.message}`, 'error');
                     updateUI();
                 }
             } catch (error) {
-                addLog(`Error stopping script: ${error.message}`, 'error');
+                addLog(`Error stopping playback: ${error.message}`, 'error');
                 updateUI();
             }
         }
 
+        // Update progress bar based on video time
+        function updateProgressBar() {
+            if (videoLoaded && elements.videoPlayer.duration) {
+                const progress = (elements.videoPlayer.currentTime / elements.videoPlayer.duration) * 100;
+                elements.progressBar.style.width = `${progress}%`;
+                updateTimeDisplay();
+            }
+        }
+
+        // Video sync functions
+        function startVideoSync() {
+            if (!videoLoaded || !scriptLoaded) return;
+            
+            // Stop any existing sync
+            stopVideoSync();
+            
+            // Start new sync
+            syncVideoTimeWithServer();
+            videoSyncInterval = setInterval(syncVideoTimeWithServer, 100); // Sync every 100ms
+            videoSyncActive = true;
+            updateUI();
+            addLog('Video synchronization started', 'info');
+        }
+        
+        function stopVideoSync() {
+            if (videoSyncInterval) {
+                clearInterval(videoSyncInterval);
+                videoSyncInterval = null;
+            }
+            
+            if (videoSyncActive) {
+                videoSyncActive = false;
+                updateUI();
+                
+                // Tell server to disable sync
+                fetch(`${SERVER_URL}/lovespouse/script?action=disable_sync`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'sync_disabled') {
+                            addLog('Video synchronization stopped', 'info');
+                        }
+                    })
+                    .catch(error => {
+                        addLog(`Error disabling sync: ${error.message}`, 'error');
+                    });
+            }
+        }
+        
+        function syncVideoTimeWithServer() {
+            if (!videoLoaded || !scriptLoaded) return;
+            
+            const videoTimeMs = Math.round(elements.videoPlayer.currentTime * 1000);
+            
+            fetch(`${SERVER_URL}/lovespouse/script?action=sync&time=${videoTimeMs}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status !== 'synced') {
+                        addLog(`Sync error: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    addLog(`Sync error: ${error.message}`, 'error');
+                    stopVideoSync();
+                });
+        }
+
+        // Event listeners
         elements.toggleBtn.addEventListener('click', () => {
             if (currentState === PlayerState.PLAYING) {
-                pauseScript();
+                pausePlayback();
             } else {
-                startScript();
+                startPlayback();
             }
         });
 
-        elements.stopBtn.addEventListener('click', stopScript);
-        elements.scriptFileInput.addEventListener('change', handleFileSelection);
+        elements.stopBtn.addEventListener('click', stopPlayback);
+        elements.scriptFileInput.addEventListener('change', handleScriptFileSelection);
+        elements.videoFileInput.addEventListener('change', handleVideoFileSelection);
+        
+        // Video event listeners
+        elements.videoPlayer.addEventListener('play', () => {
+            if (currentState !== PlayerState.PLAYING && scriptLoaded) {
+                startPlayback();
+            } else if (currentState === PlayerState.PLAYING) {
+                startVideoSync();
+            }
+        });
+        
+        elements.videoPlayer.addEventListener('pause', () => {
+            if (currentState === PlayerState.PLAYING && !elements.videoPlayer.ended) {
+                pausePlayback();
+            } else {
+                stopVideoSync();
+            }
+        });
+        
+        elements.videoPlayer.addEventListener('seeking', () => {
+            if (videoSyncActive && currentState === PlayerState.PLAYING) {
+                syncVideoTimeWithServer();
+            }
+        });
+        
+        elements.videoPlayer.addEventListener('ended', () => {
+            if (currentState === PlayerState.PLAYING) {
+                stopPlayback();
+            }
+        });
+        
+        elements.videoPlayer.addEventListener('timeupdate', updateProgressBar);
 
+        // Initial UI update
         updateUI();
     </script>
 </body>

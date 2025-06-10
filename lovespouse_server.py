@@ -70,6 +70,9 @@ class ScriptPlayer(threading.Thread):
         self.paused = False
         self.start_time = None
         self.pause_offset = 0
+        self.last_action_index = 0
+        self.video_sync = False
+        self.video_time = 0
         
     def run(self):
         if not self.actions:
@@ -86,24 +89,45 @@ class ScriptPlayer(threading.Thread):
                 time.sleep(0.1)
                 continue
                 
-            current_time = time.time() * 1000
-            elapsed = current_time - self.start_time - self.pause_offset
-            
-            action = sorted_actions[i]
-            action_time = action.get("at", 0)
-            
-            if elapsed >= action_time:
-                # 액션 실행
-                pos = action.get("pos", 0)
-                # pos 값(0-100)을 submode 값(0-9)으로 변환
-                submode = min(9, max(0, int(pos / 11)))
-                command = get_command(self.mode, submode)
-                asyncio.run(send_command(command, 0.05))  # 짧은 지속시간으로 명령 전송
-                i += 1
+            if self.video_sync:
+                # 비디오 시간 기준으로 액션 실행
+                elapsed = self.video_time
             else:
-                # 다음 액션까지 대기
-                sleep_time = min(0.01, (action_time - elapsed) / 1000)
+                # 내부 타이머 기준으로 액션 실행
+                current_time = time.time() * 1000
+                elapsed = current_time - self.start_time - self.pause_offset
+            
+            # 현재 시간에 맞는 액션 찾기
+            while i < len(sorted_actions):
+                action = sorted_actions[i]
+                action_time = action.get("at", 0)
+                
+                if elapsed >= action_time:
+                    # 액션 실행
+                    pos = action.get("pos", 0)
+                    # pos 값(0-100)을 submode 값(0-9)으로 변환
+                    submode = min(9, max(0, int(pos / 11)))
+                    command = get_command(self.mode, submode)
+                    asyncio.run(send_command(command, 0.05))  # 짧은 지속시간으로 명령 전송
+                    self.last_action_index = i
+                    i += 1
+                else:
+                    break
+            
+            # 다음 액션까지 대기
+            if i < len(sorted_actions):
+                next_action = sorted_actions[i]
+                next_time = next_action.get("at", 0)
+                if self.video_sync:
+                    # 비디오 동기화 모드에서는 짧게 대기
+                    sleep_time = 0.01
+                else:
+                    # 내부 타이머 모드에서는 다음 액션까지 대기
+                    sleep_time = min(0.01, (next_time - elapsed) / 1000)
                 time.sleep(max(0.001, sleep_time))
+            else:
+                # 모든 액션 완료
+                time.sleep(0.1)
     
     def pause(self):
         if not self.paused:
@@ -118,6 +142,22 @@ class ScriptPlayer(threading.Thread):
     
     def stop(self):
         self.do_run = False
+        
+    def set_video_time(self, video_time_ms):
+        """비디오 시간을 설정하여 스크립트와 동기화"""
+        self.video_time = video_time_ms
+        self.video_sync = True
+        
+    def disable_video_sync(self):
+        """비디오 동기화 모드 비활성화"""
+        self.video_sync = False
+        # 현재 시간 기준으로 시작 시간 재설정
+        current_time = time.time() * 1000
+        if self.last_action_index < len(self.actions):
+            last_action = sorted(self.actions, key=lambda x: x.get("at", 0))[self.last_action_index]
+            last_time = last_action.get("at", 0)
+            self.start_time = current_time - last_time
+            self.pause_offset = 0
 
 # 스크립트 관리
 script_player = None
@@ -163,9 +203,23 @@ def stop_script():
     
     script_player.stop()
     script_player.join(1)
-    script_player = None
-    
     return {"status": "stopped"}
+
+def sync_with_video(video_time_ms):
+    global script_player
+    if not script_player or not script_player.is_alive():
+        return {"status": "error", "message": "No script running"}
+    
+    script_player.set_video_time(video_time_ms)
+    return {"status": "synced", "time": video_time_ms}
+
+def disable_video_sync():
+    global script_player
+    if not script_player or not script_player.is_alive():
+        return {"status": "error", "message": "No script running"}
+    
+    script_player.disable_video_sync()
+    return {"status": "sync_disabled"}
 
 # 요청 처리 함수
 sb = None
@@ -194,14 +248,14 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-type", content_type)
         self.send_header("Access-Control-Allow-Origin", "*")  # CORS 허용
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Toy-Mode, X-Video-Time")
         self.end_headers()
 
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Toy-Mode, X-Video-Time")
         self.end_headers()
 
     def do_GET(self):
@@ -222,6 +276,27 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"File not found")
                 return
         
+        # 비디오 파일 제공
+        if path.startswith("/videos/"):
+            video_path = path[8:]  # "/videos/" 제거
+            try:
+                with open(os.path.join("videos", video_path), "rb") as file:
+                    self.send_response(200)
+                    if video_path.endswith(".mp4"):
+                        self.send_header("Content-type", "video/mp4")
+                    elif video_path.endswith(".webm"):
+                        self.send_header("Content-type", "video/webm")
+                    else:
+                        self.send_header("Content-type", "application/octet-stream")
+                    self.end_headers()
+                    self.wfile.write(file.read())
+                    return
+            except FileNotFoundError:
+                self.send_response(404)
+                self.end_headers()
+                self.wfile.write(b"Video file not found")
+                return
+        
         if path == "/lovespouse/script":
             # 스크립트 관련 명령 처리
             action = query.get("action", ["status"])[0]
@@ -232,15 +307,23 @@ class RequestHandler(BaseHTTPRequestHandler):
                 response = pause_script()
             elif action == "stop":
                 response = stop_script()
+            elif action == "sync":
+                if "time" in query:
+                    video_time = int(query["time"][0])
+                    response = sync_with_video(video_time)
+                else:
+                    response = {"status": "error", "message": "Missing time parameter"}
+            elif action == "disable_sync":
+                response = disable_video_sync()
             elif action == "status":
                 if not script_player:
                     response = {"status": "no_script"}
                 elif not script_player.is_alive():
-                    response = {"status": "loaded"}
+                    response = {"status": "loaded_not_running"}
                 elif script_player.paused:
                     response = {"status": "paused"}
                 else:
-                    response = {"status": "started"}
+                    response = {"status": "playing"}
             else:
                 response = {"status": "error", "message": "Unknown action"}
                 
@@ -303,6 +386,10 @@ def run_server(port=8080):
     server_address = ("", port)
     httpd = HTTPServer(server_address, RequestHandler)
     logging.info(f"LoveSpouse BLE control server running on port {port}")
+    
+    # videos 디렉토리 생성 (없는 경우)
+    os.makedirs("videos", exist_ok=True)
+    
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
