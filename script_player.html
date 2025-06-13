@@ -215,15 +215,9 @@
         
         <div class="file-uploads">
             <div class="file-upload">
-                <label for="videoFile" class="file-label">Choose Video File</label>
-                <input type="file" id="videoFile" accept="video/*" style="display: none;">
-                <span id="videoFileName" class="file-name">No video selected</span>
-            </div>
-            
-            <div class="file-upload">
-                <label for="scriptFile" class="file-label">Choose Funscript File</label>
-                <input type="file" id="scriptFile" accept=".funscript" style="display: none;">
-                <span id="scriptFileName" class="file-name">No script selected</span>
+                <label for="comboFile" class="file-label">Choose Video & Funscript</label>
+                <input type="file" id="comboFile" accept="video/*,.funscript" multiple style="display: none;">
+                <span id="comboFileName" class="file-name">No file selected</span>
             </div>
         </div>
         
@@ -264,10 +258,8 @@
             stopBtn: document.getElementById('stopBtn'),
             statusText: document.getElementById('statusText'),
             logContainer: document.getElementById('logContainer'),
-            scriptFileInput: document.getElementById('scriptFile'),
-            scriptFileName: document.getElementById('scriptFileName'),
-            videoFileInput: document.getElementById('videoFile'),
-            videoFileName: document.getElementById('videoFileName'),
+            comboFileInput: document.getElementById('comboFile'),
+            comboFileName: document.getElementById('comboFileName'),
             videoPlayer: document.getElementById('videoPlayer'),
             noVideoMessage: document.getElementById('noVideoMessage'),
             progressBar: document.getElementById('progressBar'),
@@ -322,10 +314,8 @@
 
         function resetToInitial() {
             elements.scriptInput.value = '';
-            elements.scriptFileName.textContent = 'No script selected';
-            elements.scriptFileInput.value = '';
-            elements.videoFileName.textContent = 'No video selected';
-            elements.videoFileInput.value = '';
+            elements.comboFileName.textContent = 'No file selected';
+            elements.comboFileInput.value = '';
             elements.videoPlayer.style.display = 'none';
             elements.noVideoMessage.style.display = 'flex';
             elements.videoPlayer.src = '';
@@ -391,62 +381,50 @@
             return filename.split('.').slice(0, -1).join('.');
         }
 
-        function handleScriptFileSelection(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            if (!file.name.toLowerCase().endsWith('.funscript')) {
-                addLog('Only .funscript files are allowed', 'error');
-                elements.scriptFileInput.value = '';
-                elements.scriptFileName.textContent = 'No script selected';
+        function handleComboFileSelection(event) {
+            const files = Array.from(event.target.files);
+            if (files.length !== 2) {
+                alert('Please select both a video file and a funscript file together.');
+                elements.comboFileInput.value = '';
+                elements.comboFileName.textContent = 'No file selected';
                 return;
             }
-            
-            elements.scriptFileName.textContent = file.name;
-            
+            let videoFile = null, scriptFile = null;
+            for (const file of files) {
+                if (file.name.toLowerCase().endsWith('.funscript')) scriptFile = file;
+                else if (file.type.startsWith('video/')) videoFile = file;
+            }
+            if (!videoFile || !scriptFile) {
+                alert('Please select one video file and one funscript file with the same base name.');
+                elements.comboFileInput.value = '';
+                elements.comboFileName.textContent = 'No file selected';
+                return;
+            }
+            // Show selected file names
+            elements.comboFileName.textContent = videoFile.name + ' + ' + scriptFile.name;
+            // Load video
+            const videoURL = URL.createObjectURL(videoFile);
+            elements.videoPlayer.src = videoURL;
+            elements.videoPlayer.style.display = 'block';
+            elements.noVideoMessage.style.display = 'none';
+            elements.timeDisplay.style.display = 'block';
+            videoLoaded = true;
+            addLog(`Video "${videoFile.name}" loaded`, 'success');
+            // Load funscript
             const reader = new FileReader();
             reader.onload = e => {
                 try {
                     const fileContent = e.target.result;
                     JSON.parse(fileContent);
                     elements.scriptInput.value = JSON.stringify(JSON.parse(fileContent), null, 2);
-                    addLog(`Script "${file.name}" loaded`, 'success');
+                    addLog(`Script "${scriptFile.name}" loaded`, 'success');
                     loadScriptToServer(fileContent);
-                    
-                    // Check if there's a matching video file
-                    const baseFileName = getFileNameWithoutExtension(file.name);
-                    if (!videoLoaded) {
-                        addLog(`Looking for matching video file with name: ${baseFileName}.*`, 'info');
-                    }
                 } catch (error) {
                     addLog(`Error parsing script file: ${error.message}`, 'error');
                 }
             };
             reader.onerror = () => addLog('Error reading script file', 'error');
-            reader.readAsText(file);
-        }
-
-        function handleVideoFileSelection(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            elements.videoFileName.textContent = file.name;
-            
-            // Create object URL for the video
-            const videoURL = URL.createObjectURL(file);
-            elements.videoPlayer.src = videoURL;
-            elements.videoPlayer.style.display = 'block';
-            elements.noVideoMessage.style.display = 'none';
-            elements.timeDisplay.style.display = 'block';
-            videoLoaded = true;
-            
-            addLog(`Video "${file.name}" loaded`, 'success');
-            
-            // Check if there's a matching script file
-            const baseFileName = getFileNameWithoutExtension(file.name);
-            if (!scriptLoaded) {
-                addLog(`Looking for matching script file with name: ${baseFileName}.funscript`, 'info');
-            }
+            reader.readAsText(scriptFile);
         }
 
         async function startPlayback() {
@@ -608,8 +586,7 @@
         });
 
         elements.stopBtn.addEventListener('click', stopPlayback);
-        elements.scriptFileInput.addEventListener('change', handleScriptFileSelection);
-        elements.videoFileInput.addEventListener('change', handleVideoFileSelection);
+        elements.comboFileInput.addEventListener('change', handleComboFileSelection);
         
         // Video event listeners
         elements.videoPlayer.addEventListener('play', () => {
