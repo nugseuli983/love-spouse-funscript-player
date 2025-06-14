@@ -281,6 +281,13 @@
         let videoSyncActive = false;
         let videoSyncInterval = null;
 
+        // --- CLIENT-SIDE FUNSCRIPT SCHEDULING ---
+        let funscriptActions = [];
+        let scheduledTimeouts = [];
+        let playStartTime = 0;
+        let pausedAt = 0;
+        let isPaused = false;
+
         function addLog(message, type = '') {
             const logEntry = document.createElement('div');
             logEntry.className = `log-entry ${type}`;
@@ -343,48 +350,53 @@
             }
         }
 
-        function loadScriptToServer(scriptText) {
+        // --- OVERRIDE PLAY/PAUSE/STOP ---
+        async function startPlayback() {
+            if (!videoLoaded || !scriptLoaded) return;
             try {
-                if (!scriptText) {
-                    addLog('Script content is empty', 'error');
-                    return;
-                }
-                const parsedScript = JSON.parse(scriptText);
-                scriptData = parsedScript;
-                const toyMode = elements.toyModeSelect.value;
-                fetch(`${SERVER_URL}/lovespouse/script/load`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Toy-Mode': toyMode
-                    },
-                    body: scriptText
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'loaded') {
-                        addLog(`Script loaded with ${data.actions} actions`, 'success');
-                        scriptLoaded = true;
-                        currentState = PlayerState.LOADED;
-                        updateUI();
-                    } else {
-                        addLog(`Error loading script: ${data.message}`, 'error');
-                    }
-                })
-                .catch(error => addLog(`Error loading script: ${error.message}`, 'error'));
+                await elements.videoPlayer.play();
             } catch (error) {
-                addLog(`Invalid JSON format: ${error.message}`, 'error');
+                addLog(`Error playing video: ${error.message}`, 'error');
             }
+            playStartTime = elements.videoPlayer.currentTime * 1000;
+            isPaused = false;
+            scheduleFunscriptActions(playStartTime);
+            currentState = PlayerState.PLAYING;
+            updateUI();
         }
 
-        function getFileNameWithoutExtension(filename) {
-            return filename.split('.').slice(0, -1).join('.');
+        async function pausePlayback() {
+            if (!videoLoaded || !scriptLoaded) return;
+            elements.videoPlayer.pause();
+            pausedAt = elements.videoPlayer.currentTime * 1000;
+            isPaused = true;
+            clearAllScheduledTimeouts();
+            currentState = PlayerState.PAUSED;
+            updateUI();
         }
 
+        async function stopPlayback() {
+            elements.toggleBtn.disabled = true;
+            elements.stopBtn.disabled = true;
+            if (videoLoaded) {
+                elements.videoPlayer.pause();
+                elements.videoPlayer.currentTime = 0;
+            }
+            clearAllScheduledTimeouts();
+            isPaused = false;
+            currentState = PlayerState.LOADED;
+            updateUI();
+        }
+
+        // --- FUNSCRIPT LOADING ---
+        // Bind file input change event
+        elements.comboFileInput.addEventListener('change', handleComboFileSelection);
+        // Enable play button after both files are loaded
         function handleComboFileSelection(event) {
             const files = Array.from(event.target.files);
             if (files.length !== 2) {
                 alert('Please select both a video file and a funscript file together.');
+                // Do NOT reopen the file dialog, just reset UI
                 elements.comboFileInput.value = '';
                 elements.comboFileName.textContent = 'No file selected';
                 return;
@@ -400,7 +412,6 @@
                 elements.comboFileName.textContent = 'No file selected';
                 return;
             }
-            // Show selected file names
             elements.comboFileName.textContent = videoFile.name + ' + ' + scriptFile.name;
             // Load video
             const videoURL = URL.createObjectURL(videoFile);
@@ -415,10 +426,13 @@
             reader.onload = e => {
                 try {
                     const fileContent = e.target.result;
-                    JSON.parse(fileContent);
-                    elements.scriptInput.value = JSON.stringify(JSON.parse(fileContent), null, 2);
+                    const parsed = JSON.parse(fileContent);
+                    elements.scriptInput.value = JSON.stringify(parsed, null, 2);
                     addLog(`Script "${scriptFile.name}" loaded`, 'success');
-                    loadScriptToServer(fileContent);
+                    funscriptActions = (parsed.actions || []).map(a => ({ at: a.at, pos: a.pos }));
+                    scriptLoaded = true;
+                    currentState = PlayerState.LOADED;
+                    updateUI();
                 } catch (error) {
                     addLog(`Error parsing script file: ${error.message}`, 'error');
                 }
@@ -427,87 +441,29 @@
             reader.readAsText(scriptFile);
         }
 
-        async function startPlayback() {
-            try {
-                // Start video if available
-                if (videoLoaded) {
-                    try {
-                        await elements.videoPlayer.play();
-                        startVideoSync();
-                    } catch (error) {
-                        addLog(`Error playing video: ${error.message}`, 'error');
-                    }
-                }
-                
-                // Start script
-                const response = await fetch(`${SERVER_URL}/lovespouse/script?action=start`);
-                const data = await response.json();
-                if (data.status === 'started' || data.status === 'resumed') {
-                    addLog(`Script ${data.status}`, 'success');
-                    currentState = PlayerState.PLAYING;
-                    updateUI();
-                } else if (data.status === 'already_running') {
-                    addLog('Script is already running', 'success');
-                    currentState = PlayerState.PLAYING;
-                    updateUI();
-                } else {
-                    addLog(`Error starting script: ${data.message}`, 'error');
-                }
-            } catch (error) {
-                addLog(`Error starting playback: ${error.message}`, 'error');
+        // --- VIDEO EVENTS ---
+        elements.videoPlayer.addEventListener('play', () => {
+            if (isPaused) {
+                // Resume from pause
+                playStartTime = pausedAt;
+                scheduleFunscriptActions(playStartTime);
+                isPaused = false;
+                currentState = PlayerState.PLAYING;
+                updateUI();
+            } else if (currentState === PlayerState.LOADED) {
+                // Start playback if user pressed native play button from loaded state
+                startPlayback();
             }
-        }
-
-        async function pausePlayback() {
-            try {
-                // Pause video if available
-                if (videoLoaded) {
-                    elements.videoPlayer.pause();
-                    stopVideoSync();
-                }
-                
-                // Pause script
-                const response = await fetch(`${SERVER_URL}/lovespouse/script?action=pause`);
-                const data = await response.json();
-                if (data.status === 'paused') {
-                    addLog('Script paused', 'success');
-                    currentState = PlayerState.PAUSED;
-                    updateUI();
-                } else {
-                    addLog(`Error pausing script: ${data.message}, ${data.status}`, 'error');
-                }
-            } catch (error) {
-                addLog(`Error pausing playback: ${error.message}`, 'error');
+        });
+        elements.videoPlayer.addEventListener('pause', () => {
+            if (currentState === PlayerState.PLAYING) {
+                pausePlayback();
             }
-        }
-
-        async function stopPlayback() {
-            elements.toggleBtn.disabled = true;
-            elements.stopBtn.disabled = true;
-            
-            try {
-                // Stop video if available
-                if (videoLoaded) {
-                    elements.videoPlayer.pause();
-                    elements.videoPlayer.currentTime = 0;
-                    stopVideoSync();
-                }
-                
-                // Stop script
-                const response = await fetch(`${SERVER_URL}/lovespouse/script?action=stop`);
-                const data = await response.json();
-                if (data.status === 'stopped') {
-                    addLog('Script stopped', 'success');
-                } else {
-                    addLog(`Error stopping script: ${data.message}`, 'error');
-                }
-            } catch (error) {
-                addLog(`Error stopping playback: ${error.message}`, 'error');
-            }
-            // Always set state to LOADED after stop
-            currentState = PlayerState.LOADED;
-            updateUI();
-        }
+        });
+        elements.videoPlayer.addEventListener('ended', () => {
+            stopPlayback();
+        });
+        elements.videoPlayer.addEventListener('timeupdate', updateProgressBar);
 
         // Update progress bar based on video time
         function updateProgressBar() {
@@ -518,64 +474,39 @@
             }
         }
 
-        // Video sync functions
-        function startVideoSync() {
-            if (!videoLoaded || !scriptLoaded) return;
-            
-            // Stop any existing sync
-            stopVideoSync();
-            
-            // Start new sync
-            syncVideoTimeWithServer();
-            videoSyncInterval = setInterval(syncVideoTimeWithServer, 100); // Sync every 100ms
-            videoSyncActive = true;
-            updateUI();
-            addLog('Video synchronization started', 'info');
-        }
-        
-        function stopVideoSync() {
-            if (videoSyncInterval) {
-                clearInterval(videoSyncInterval);
-                videoSyncInterval = null;
-            }
-            
-            if (videoSyncActive) {
-                videoSyncActive = false;
-                updateUI();
-                
-                // Tell server to disable sync
-                fetch(`${SERVER_URL}/lovespouse/script?action=disable_sync`)
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'sync_disabled') {
-                            addLog('Video synchronization stopped', 'info');
-                        }
-                    })
-                    .catch(error => {
-                        addLog(`Error disabling sync: ${error.message}`, 'error');
-                    });
-            }
-        }
-        
-        function syncVideoTimeWithServer() {
-            if (!videoLoaded || !scriptLoaded) return;
-            
-            const videoTimeMs = Math.round(elements.videoPlayer.currentTime * 1000);
-            
-            fetch(`${SERVER_URL}/lovespouse/script?action=sync&time=${videoTimeMs}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status !== 'synced') {
-                        addLog(`Sync error: ${data.message}`, 'error');
-                    }
-                })
-                .catch(error => {
-                    addLog(`Sync error: ${error.message}`, 'error');
-                    stopVideoSync();
-                });
+        // --- FUNSCRIPT SCHEDULING ---
+        function clearAllScheduledTimeouts() {
+            scheduledTimeouts.forEach(timeout => clearTimeout(timeout));
+            scheduledTimeouts = [];
         }
 
-        // Event listeners
+        function scheduleFunscriptActions(startOffsetMs = 0) {
+            clearAllScheduledTimeouts();
+            if (!funscriptActions.length) return;
+            const now = performance.now();
+            funscriptActions.forEach(action => {
+                const delay = action.at - startOffsetMs;
+                if (delay >= 0) {
+                    const timeout = setTimeout(() => {
+                        sendDeviceAction(action);
+                    }, delay);
+                    scheduledTimeouts.push(timeout);
+                }
+            });
+        }
+
+        function sendDeviceAction(action) {
+            const toyMode = elements.toyModeSelect.value;
+            const pos = action.pos || 0;
+            const submode = Math.min(9, Math.max(0, Math.floor(pos / 11)));
+            fetch(`${SERVER_URL}/lovespouse`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: toyMode, submode, duration: 0.05 })
+            });
+        }
+
+        // Add play/pause button event listener
         elements.toggleBtn.addEventListener('click', () => {
             if (currentState === PlayerState.PLAYING) {
                 pausePlayback();
@@ -583,43 +514,8 @@
                 startPlayback();
             }
         });
-
+        // Add stop button event listener
         elements.stopBtn.addEventListener('click', stopPlayback);
-        elements.comboFileInput.addEventListener('change', handleComboFileSelection);
-        
-        // Video event listeners
-        elements.videoPlayer.addEventListener('play', () => {
-            if (currentState !== PlayerState.PLAYING && scriptLoaded) {
-                startPlayback();
-            } else if (currentState === PlayerState.PLAYING) {
-                startVideoSync();
-            }
-        });
-        
-        elements.videoPlayer.addEventListener('pause', () => {
-            if (currentState === PlayerState.PLAYING && !elements.videoPlayer.ended) {
-                pausePlayback();
-            } else {
-                stopVideoSync();
-            }
-        });
-        
-        elements.videoPlayer.addEventListener('seeking', () => {
-            if (videoSyncActive && currentState === PlayerState.PLAYING) {
-                syncVideoTimeWithServer();
-            }
-        });
-        
-        elements.videoPlayer.addEventListener('ended', () => {
-            if (currentState === PlayerState.PLAYING) {
-                stopPlayback();
-            }
-            // After video ends, set state to LOADED
-            currentState = PlayerState.LOADED;
-            updateUI();
-        });
-        
-        elements.videoPlayer.addEventListener('timeupdate', updateProgressBar);
 
         // Initial UI update
         updateUI();
