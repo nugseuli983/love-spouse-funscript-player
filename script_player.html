@@ -474,7 +474,7 @@
                     currentState = PlayerState.PAUSED;
                     updateUI();
                 } else {
-                    addLog(`Error pausing script: ${data.message}`, 'error');
+                    addLog(`Error pausing script: ${data.message}, ${data.status}`, 'error');
                 }
             } catch (error) {
                 addLog(`Error pausing playback: ${error.message}`, 'error');
@@ -498,16 +498,15 @@
                 const data = await response.json();
                 if (data.status === 'stopped') {
                     addLog('Script stopped', 'success');
-                    currentState = PlayerState.LOADED;
-                    updateUI();
                 } else {
                     addLog(`Error stopping script: ${data.message}`, 'error');
-                    updateUI();
                 }
             } catch (error) {
                 addLog(`Error stopping playback: ${error.message}`, 'error');
-                updateUI();
             }
+            // Always set state to LOADED after stop
+            currentState = PlayerState.LOADED;
+            updateUI();
         }
 
         // Update progress bar based on video time
@@ -615,6 +614,9 @@
             if (currentState === PlayerState.PLAYING) {
                 stopPlayback();
             }
+            // After video ends, set state to LOADED
+            currentState = PlayerState.LOADED;
+            updateUI();
         });
         
         elements.videoPlayer.addEventListener('timeupdate', updateProgressBar);

@@ -178,13 +178,15 @@ def start_script():
     global script_player
     if not script_player:
         return {"status": "error", "message": "No script loaded"}
-    
     if script_player.is_alive():
         if script_player.paused:
             script_player.resume()
             return {"status": "resumed"}
         return {"status": "already_running"}
-    
+    # If script_player exists but is not alive, recreate thread for replay
+    script_data = script_player.script_data
+    mode = script_player.mode
+    script_player = ScriptPlayer(script_data, mode)
     script_player.start()
     return {"status": "started"}
 
@@ -200,9 +202,9 @@ def stop_script():
     global script_player
     if not script_player or not script_player.is_alive():
         return {"status": "error", "message": "No script running"}
-    
     script_player.stop()
     script_player.join(1)
+    # Do NOT set script_player = None, keep script data for replay
     return {"status": "stopped"}
 
 def sync_with_video(video_time_ms):
