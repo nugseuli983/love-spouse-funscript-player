@@ -250,275 +250,148 @@
     </div>
 
     <script>
-        const SERVER_URL = 'http://localhost:8080';
-        const elements = {
-            scriptInput: document.getElementById('scriptInput'),
-            toyModeSelect: document.getElementById('toyMode'),
-            toggleBtn: document.getElementById('toggleBtn'),
-            stopBtn: document.getElementById('stopBtn'),
-            statusText: document.getElementById('statusText'),
-            logContainer: document.getElementById('logContainer'),
-            comboFileInput: document.getElementById('comboFile'),
-            comboFileName: document.getElementById('comboFileName'),
-            videoPlayer: document.getElementById('videoPlayer'),
-            noVideoMessage: document.getElementById('noVideoMessage'),
-            progressBar: document.getElementById('progressBar'),
-            timeDisplay: document.getElementById('timeDisplay'),
-            syncIndicator: document.getElementById('syncIndicator')
-        };
+    const SERVER_URL = 'http://localhost:8080';
+    const el = {
+        scriptInput: document.getElementById('scriptInput'),
+        toyMode: document.getElementById('toyMode'),
+        playBtn: document.getElementById('toggleBtn'),
+        stopBtn: document.getElementById('stopBtn'),
+        status: document.getElementById('statusText'),
+        log: document.getElementById('logContainer'),
+        fileInput: document.getElementById('comboFile'),
+        fileName: document.getElementById('comboFileName'),
+        video: document.getElementById('videoPlayer'),
+        noVideo: document.getElementById('noVideoMessage'),
+        progress: document.getElementById('progressBar'),
+        time: document.getElementById('timeDisplay'),
+        sync: document.getElementById('syncIndicator')
+    };
+    const State = { NO_SCRIPT: 0, LOADED: 1, PLAYING: 2, PAUSED: 3 };
+    let state = State.NO_SCRIPT, videoLoaded = false, scriptLoaded = false, funscript = [], timeouts = [], playStart = 0, pausedAt = 0, isPaused = false;
 
-        const PlayerState = {
-            NO_SCRIPT: 'No script loaded',
-            LOADED: 'Script loaded',
-            PLAYING: 'Playing',
-            PAUSED: 'Paused'
-        };
-
-        let currentState = PlayerState.NO_SCRIPT;
-        let scriptData = null;
-        let videoLoaded = false;
-        let scriptLoaded = false;
-        let videoSyncActive = false;
-        let videoSyncInterval = null;
-
-        // --- CLIENT-SIDE FUNSCRIPT SCHEDULING ---
-        let funscriptActions = [];
-        let scheduledTimeouts = [];
-        let playStartTime = 0;
-        let pausedAt = 0;
-        let isPaused = false;
-
-        function addLog(message, type = '') {
-            const logEntry = document.createElement('div');
-            logEntry.className = `log-entry ${type}`;
-            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            elements.logContainer.appendChild(logEntry);
-            elements.logContainer.scrollTop = elements.logContainer.scrollHeight;
-        }
-
-        function updateUI() {
-            elements.statusText.textContent = currentState;
-            const buttonStates = {
-                [PlayerState.NO_SCRIPT]: { toggleDisabled: true, toggleText: '▶', toggleClass: 'play', stopDisabled: true },
-                [PlayerState.LOADED]: { toggleDisabled: false, toggleText: '▶', toggleClass: 'play', stopDisabled: false },
-                [PlayerState.PLAYING]: { toggleDisabled: false, toggleText: '⏸', toggleClass: 'pause', stopDisabled: false },
-                [PlayerState.PAUSED]: { toggleDisabled: false, toggleText: '▶', toggleClass: 'play', stopDisabled: false }
-            };
-            const state = buttonStates[currentState];
-            elements.toggleBtn.disabled = state.toggleDisabled;
-            elements.toggleBtn.textContent = state.toggleText;
-            elements.toggleBtn.className = state.toggleClass;
-            elements.stopBtn.disabled = state.stopDisabled;
-            elements.stopBtn.textContent = '⏹';
-            
-            // Update sync indicator
-            if (videoSyncActive) {
-                elements.syncIndicator.classList.add('active');
-            } else {
-                elements.syncIndicator.classList.remove('active');
-            }
-        }
-
-        function resetToInitial() {
-            elements.scriptInput.value = '';
-            elements.comboFileName.textContent = 'No file selected';
-            elements.comboFileInput.value = '';
-            elements.videoPlayer.style.display = 'none';
-            elements.noVideoMessage.style.display = 'flex';
-            elements.videoPlayer.src = '';
-            elements.progressBar.style.width = '0%';
-            elements.timeDisplay.style.display = 'none';
-            currentState = PlayerState.NO_SCRIPT;
-            scriptData = null;
-            videoLoaded = false;
-            scriptLoaded = false;
-            stopVideoSync();
-            updateUI();
-        }
-
-        function formatTime(seconds) {
-            const minutes = Math.floor(seconds / 60);
-            const remainingSeconds = Math.floor(seconds % 60);
-            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-        }
-
-        function updateTimeDisplay() {
-            if (videoLoaded && elements.videoPlayer.duration) {
-                const currentTime = elements.videoPlayer.currentTime;
-                const duration = elements.videoPlayer.duration;
-                elements.timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(duration)}`;
-            }
-        }
-
-        // --- OVERRIDE PLAY/PAUSE/STOP ---
-        async function startPlayback() {
-            if (!videoLoaded || !scriptLoaded) return;
+    function log(msg, type = '') {
+        const e = document.createElement('div');
+        e.className = `log-entry ${type}`;
+        e.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        el.log.appendChild(e);
+        el.log.scrollTop = el.log.scrollHeight;
+    }
+    function setUI() {
+        const s = [
+            {d:true,t:'▶',c:'play',s:true},
+            {d:false,t:'▶',c:'play',s:false},
+            {d:false,t:'⏸',c:'pause',s:false},
+            {d:false,t:'▶',c:'play',s:false}
+        ][state];
+        el.playBtn.disabled = s.d; el.playBtn.textContent = s.t; el.playBtn.className = s.c;
+        el.stopBtn.disabled = s.s; el.status.textContent = Object.keys(State)[state].replace('_',' ');
+        el.sync.classList.toggle('active', state === State.PLAYING);
+    }
+    function resetUI() {
+        el.scriptInput.value = '';
+        el.fileName.textContent = 'No file selected';
+        el.fileInput.value = '';
+        el.video.style.display = 'none';
+        el.noVideo.style.display = 'flex';
+        el.video.src = '';
+        el.progress.style.width = '0%';
+        el.time.style.display = 'none';
+        state = State.NO_SCRIPT;
+        videoLoaded = scriptLoaded = false;
+        setUI();
+    }
+    function fmtTime(s) {
+        const m = Math.floor(s/60), sec = Math.floor(s%60);
+        return `${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+    }
+    function updateTime() {
+        if (videoLoaded && el.video.duration)
+            el.time.textContent = `${fmtTime(el.video.currentTime)} / ${fmtTime(el.video.duration)}`;
+    }
+    function clearTimeouts() { timeouts.forEach(clearTimeout); timeouts = []; }
+    function scheduleActions(offset = 0) {
+        clearTimeouts();
+        funscript.forEach(a => {
+            const d = a.at - offset;
+            if (d >= 0) timeouts.push(setTimeout(() => sendAction(a), d));
+        });
+    }
+    function sendAction(a) {
+        const pos = a.pos || 0, submode = Math.min(9, Math.max(0, Math.floor(pos/11)));
+        fetch(`${SERVER_URL}/lovespouse`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: el.toyMode.value, submode, duration: 0.05 })
+        });
+    }
+    async function play() {
+        if (!videoLoaded || !scriptLoaded) return;
+        try { await el.video.play(); } catch(e){ log(`Error playing video: ${e.message}`,'error'); }
+        playStart = el.video.currentTime * 1000;
+        isPaused = false;
+        scheduleActions(playStart);
+        state = State.PLAYING; setUI();
+    }
+    function pause() {
+        if (!videoLoaded || !scriptLoaded) return;
+        el.video.pause();
+        pausedAt = el.video.currentTime * 1000;
+        isPaused = true;
+        clearTimeouts();
+        state = State.PAUSED; setUI();
+    }
+    function stop() {
+        el.playBtn.disabled = el.stopBtn.disabled = true;
+        if (videoLoaded) { el.video.pause(); el.video.currentTime = 0; }
+        clearTimeouts();
+        isPaused = false;
+        state = State.LOADED; setUI();
+    }
+    el.fileInput.addEventListener('change', e => {
+        const files = Array.from(e.target.files);
+        if (files.length !== 2) return alert('Please select both a video file and a funscript file together.'), el.fileInput.value = '', el.fileName.textContent = 'No file selected';
+        let v = null, s = null;
+        files.forEach(f => {
+            if (f.name.toLowerCase().endsWith('.funscript')) s = f;
+            else if (f.type.startsWith('video/')) v = f;
+        });
+        if (!v || !s) return alert('Please select one video file and one funscript file with the same base name.'), el.fileInput.value = '', el.fileName.textContent = 'No file selected';
+        el.fileName.textContent = v.name + ' + ' + s.name;
+        el.video.src = URL.createObjectURL(v);
+        el.video.style.display = 'block';
+        el.noVideo.style.display = 'none';
+        el.time.style.display = 'block';
+        videoLoaded = true;
+        log(`Video "${v.name}" loaded`,'success');
+        const r = new FileReader();
+        r.onload = e => {
             try {
-                await elements.videoPlayer.play();
-            } catch (error) {
-                addLog(`Error playing video: ${error.message}`, 'error');
-            }
-            playStartTime = elements.videoPlayer.currentTime * 1000;
-            isPaused = false;
-            scheduleFunscriptActions(playStartTime);
-            currentState = PlayerState.PLAYING;
-            updateUI();
+                const parsed = JSON.parse(e.target.result);
+                el.scriptInput.value = JSON.stringify(parsed, null, 2);
+                log(`Script "${s.name}" loaded`,'success');
+                funscript = (parsed.actions||[]).map(a=>({at:a.at,pos:a.pos}));
+                scriptLoaded = true;
+                state = State.LOADED; setUI();
+            } catch(err) { log(`Error parsing script file: ${err.message}`,'error'); }
+        };
+        r.onerror = () => log('Error reading script file','error');
+        r.readAsText(s);
+    });
+    el.video.addEventListener('play', () => {
+        if (isPaused) { playStart = pausedAt; scheduleActions(playStart); isPaused = false; state = State.PLAYING; setUI(); }
+        else if (state === State.LOADED) play();
+    });
+    el.video.addEventListener('pause', () => { if (state === State.PLAYING) pause(); });
+    el.video.addEventListener('ended', stop);
+    el.video.addEventListener('timeupdate', () => {
+        if (videoLoaded && el.video.duration) {
+            el.progress.style.width = `${(el.video.currentTime/el.video.duration)*100}%`;
+            updateTime();
         }
-
-        async function pausePlayback() {
-            if (!videoLoaded || !scriptLoaded) return;
-            elements.videoPlayer.pause();
-            pausedAt = elements.videoPlayer.currentTime * 1000;
-            isPaused = true;
-            clearAllScheduledTimeouts();
-            currentState = PlayerState.PAUSED;
-            updateUI();
-        }
-
-        async function stopPlayback() {
-            elements.toggleBtn.disabled = true;
-            elements.stopBtn.disabled = true;
-            if (videoLoaded) {
-                elements.videoPlayer.pause();
-                elements.videoPlayer.currentTime = 0;
-            }
-            clearAllScheduledTimeouts();
-            isPaused = false;
-            currentState = PlayerState.LOADED;
-            updateUI();
-        }
-
-        // --- FUNSCRIPT LOADING ---
-        // Bind file input change event
-        elements.comboFileInput.addEventListener('change', handleComboFileSelection);
-        // Enable play button after both files are loaded
-        function handleComboFileSelection(event) {
-            const files = Array.from(event.target.files);
-            if (files.length !== 2) {
-                alert('Please select both a video file and a funscript file together.');
-                // Do NOT reopen the file dialog, just reset UI
-                elements.comboFileInput.value = '';
-                elements.comboFileName.textContent = 'No file selected';
-                return;
-            }
-            let videoFile = null, scriptFile = null;
-            for (const file of files) {
-                if (file.name.toLowerCase().endsWith('.funscript')) scriptFile = file;
-                else if (file.type.startsWith('video/')) videoFile = file;
-            }
-            if (!videoFile || !scriptFile) {
-                alert('Please select one video file and one funscript file with the same base name.');
-                elements.comboFileInput.value = '';
-                elements.comboFileName.textContent = 'No file selected';
-                return;
-            }
-            elements.comboFileName.textContent = videoFile.name + ' + ' + scriptFile.name;
-            // Load video
-            const videoURL = URL.createObjectURL(videoFile);
-            elements.videoPlayer.src = videoURL;
-            elements.videoPlayer.style.display = 'block';
-            elements.noVideoMessage.style.display = 'none';
-            elements.timeDisplay.style.display = 'block';
-            videoLoaded = true;
-            addLog(`Video "${videoFile.name}" loaded`, 'success');
-            // Load funscript
-            const reader = new FileReader();
-            reader.onload = e => {
-                try {
-                    const fileContent = e.target.result;
-                    const parsed = JSON.parse(fileContent);
-                    elements.scriptInput.value = JSON.stringify(parsed, null, 2);
-                    addLog(`Script "${scriptFile.name}" loaded`, 'success');
-                    funscriptActions = (parsed.actions || []).map(a => ({ at: a.at, pos: a.pos }));
-                    scriptLoaded = true;
-                    currentState = PlayerState.LOADED;
-                    updateUI();
-                } catch (error) {
-                    addLog(`Error parsing script file: ${error.message}`, 'error');
-                }
-            };
-            reader.onerror = () => addLog('Error reading script file', 'error');
-            reader.readAsText(scriptFile);
-        }
-
-        // --- VIDEO EVENTS ---
-        elements.videoPlayer.addEventListener('play', () => {
-            if (isPaused) {
-                // Resume from pause
-                playStartTime = pausedAt;
-                scheduleFunscriptActions(playStartTime);
-                isPaused = false;
-                currentState = PlayerState.PLAYING;
-                updateUI();
-            } else if (currentState === PlayerState.LOADED) {
-                // Start playback if user pressed native play button from loaded state
-                startPlayback();
-            }
-        });
-        elements.videoPlayer.addEventListener('pause', () => {
-            if (currentState === PlayerState.PLAYING) {
-                pausePlayback();
-            }
-        });
-        elements.videoPlayer.addEventListener('ended', () => {
-            stopPlayback();
-        });
-        elements.videoPlayer.addEventListener('timeupdate', updateProgressBar);
-
-        // Update progress bar based on video time
-        function updateProgressBar() {
-            if (videoLoaded && elements.videoPlayer.duration) {
-                const progress = (elements.videoPlayer.currentTime / elements.videoPlayer.duration) * 100;
-                elements.progressBar.style.width = `${progress}%`;
-                updateTimeDisplay();
-            }
-        }
-
-        // --- FUNSCRIPT SCHEDULING ---
-        function clearAllScheduledTimeouts() {
-            scheduledTimeouts.forEach(timeout => clearTimeout(timeout));
-            scheduledTimeouts = [];
-        }
-
-        function scheduleFunscriptActions(startOffsetMs = 0) {
-            clearAllScheduledTimeouts();
-            if (!funscriptActions.length) return;
-            const now = performance.now();
-            funscriptActions.forEach(action => {
-                const delay = action.at - startOffsetMs;
-                if (delay >= 0) {
-                    const timeout = setTimeout(() => {
-                        sendDeviceAction(action);
-                    }, delay);
-                    scheduledTimeouts.push(timeout);
-                }
-            });
-        }
-
-        function sendDeviceAction(action) {
-            const toyMode = elements.toyModeSelect.value;
-            const pos = action.pos || 0;
-            const submode = Math.min(9, Math.max(0, Math.floor(pos / 11)));
-            fetch(`${SERVER_URL}/lovespouse`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ mode: toyMode, submode, duration: 0.05 })
-            });
-        }
-
-        // Add play/pause button event listener
-        elements.toggleBtn.addEventListener('click', () => {
-            if (currentState === PlayerState.PLAYING) {
-                pausePlayback();
-            } else {
-                startPlayback();
-            }
-        });
-        // Add stop button event listener
-        elements.stopBtn.addEventListener('click', stopPlayback);
-
-        // Initial UI update
-        updateUI();
+    });
+    el.playBtn.addEventListener('click', () => { state === State.PLAYING ? pause() : play(); });
+    el.stopBtn.addEventListener('click', stop);
+    setUI();
     </script>
 </body>
 </html>
