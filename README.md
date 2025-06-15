@@ -1,15 +1,15 @@
 # LoveSpouse Script Player
 
-A web-based player for funscript files with video synchronization and BLE toy control.
+A minimal web-based player for funscript files with video synchronization and BLE toy control.
 
 ## Features
 
-- Load and play funscript files
-- Synchronize script playback with video playback
-- Control BLE toys based on script actions
-- Support for multiple toy modes (shake, shock1, shock2, telescope)
-- Video player with time display and progress bar
-- Automatic matching of script and video files with the same name
+- Load and play funscript files synchronized with video playback
+- Control BLE toys based on funscript actions ("Shake" mode only)
+- Robust client-side scheduling: device actions stay tightly synchronized with video playback, even with delays, seeks, or pauses
+- Minimal UI: relies solely on the native HTML5 video controls
+- Single file input for both video and funscript (both must be selected at once)
+- Server only handles immediate device commands; all scheduling and sync is client-side
 
 ## Setup
 
@@ -17,14 +17,12 @@ A web-based player for funscript files with video synchronization and BLE toy co
    - `winsdk` for Bluetooth LE communication
    - Standard Python libraries
 
-2. Create a `videos` folder in the same directory as the server script (this will be created automatically when the server starts)
-
-3. Run the server:
+2. Run the server:
    ```
    python lovespouse_server.py
    ```
 
-4. Open a web browser and navigate to:
+3. Open a web browser and navigate to:
    ```
    http://localhost:8080
    ```
@@ -33,26 +31,16 @@ A web-based player for funscript files with video synchronization and BLE toy co
 
 ### Loading Files
 
-1. Select a toy mode from the dropdown menu (shake, shock1, shock2, or telescope)
-2. Click "Choose Video File" to load a video
-3. Click "Choose Funscript File" to load a funscript
-   - If you load a funscript first, the system will look for a video with the same name
-   - If you load a video first, the system will look for a funscript with the same name
+1. Only "Shake" mode is available (other modes are disabled)
+2. Use the file input to select both a video file and a funscript file at the same time
+   - Both files must be selected together; the UI will reset if only one is chosen
 
-### Playback Controls
+### Playback & Synchronization
 
-- **Play/Pause Button**: Toggles between play and pause states
-- **Stop Button**: Stops playback and resets to the beginning
-- **Video Player**: Standard HTML5 video controls for seeking, volume, etc.
-
-### Synchronization
-
-When both a video and script are loaded:
-
-1. The script playback will automatically synchronize with the video playback
-2. The "Video Sync" indicator will turn green when synchronization is active
-3. When you seek in the video, the script will automatically adjust to the new position
-4. Pausing the video will also pause the script
+- Use the native video player's controls to play, pause, seek, or stop
+- Device actions are scheduled and fired on the client, always synced to the current video time
+- Scheduler polls every 100ms and only schedules the next 5 seconds of actions, ensuring robust sync even with playback delays or seeks
+- All scheduled actions are cleared and resynced on file change, pause, seek, or end
 
 ## File Format
 
@@ -90,7 +78,7 @@ The `pos` value in the funscript is mapped to intensity levels (0-9) for the toy
 
 - If you encounter Bluetooth connection issues, make sure your toy is powered on and in pairing mode
 - If the script doesn't sync properly with the video, try reloading both files
-- Check the log messages at the bottom of the page for error information
+- Check the browser console for error information
 
 ## License
 
