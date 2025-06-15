@@ -245,7 +245,7 @@
         <textarea id="scriptInput" placeholder="Script content will appear here after selecting a file..."></textarea>
         
         <div class="controls">
-            <button id="stopBtn" disabled>⏹</button>
+            <!-- Removed custom stop button -->
         </div>
         
         <div class="status-container">
@@ -265,7 +265,6 @@
     const el = {
         scriptInput: document.getElementById('scriptInput'),
         toyMode: document.getElementById('toyMode'),
-        stopBtn: document.getElementById('stopBtn'),
         status: document.getElementById('statusText'),
         log: document.getElementById('logContainer'),
         fileInput: document.getElementById('comboFile'),
@@ -287,8 +286,7 @@
         el.log.scrollTop = el.log.scrollHeight;
     }
     function setUI() {
-        // Only update stop button and status
-        el.stopBtn.disabled = state === State.NO_SCRIPT || state === State.LOADED;
+        // Only update status and sync indicator
         el.status.textContent = Object.keys(State)[state].replace('_',' ');
         el.sync.classList.toggle('active', state === State.PLAYING);
     }
@@ -366,12 +364,7 @@
         clearTimeouts();
         state = State.PAUSED; setUI();
     }
-    function stop() {
-        el.stopBtn.disabled = true;
-        if (videoLoaded) { el.video.pause(); el.video.currentTime = 0; }
-        clearTimeouts();
-        state = State.LOADED; setUI();
-    }
+    // Remove stop, showVideoStopBtn, and related event listeners
     el.fileInput.addEventListener('change', e => {
         const files = Array.from(e.target.files);
         if (files.length !== 2) return alert('Please select both a video file and a funscript file together.'), el.fileInput.value = '', el.fileName.textContent = 'No file selected';
@@ -413,7 +406,10 @@
             state = State.PAUSED; setUI();
         }
     });
-    el.video.addEventListener('ended', stop);
+    el.video.addEventListener('ended', () => {
+        clearTimeouts();
+        state = State.LOADED; setUI();
+    });
     el.video.addEventListener('timeupdate', () => {
         if (videoLoaded && el.video.duration) {
             el.progress.style.width = `${(el.video.currentTime/el.video.duration)*100}%`;
@@ -427,7 +423,6 @@
             clearTimeouts();
         }
     });
-    el.stopBtn.addEventListener('click', stop);
     setUI();
     </script>
 </body>
