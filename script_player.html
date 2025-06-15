@@ -51,42 +51,6 @@
             border-radius: 4px;
             font-family: monospace;
         }
-        .controls {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        button {
-            padding: 10px 15px;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            flex-grow: 1;
-        }
-        #toggleBtn {
-            background-color: #4CAF50;
-        }
-        #toggleBtn:hover {
-            background-color: #45a049;
-        }
-        #toggleBtn.pause {
-            background-color: #ff9800;
-        }
-        #toggleBtn.pause:hover {
-            background-color: #e68a00;
-        }
-        #stopBtn {
-            background-color: #f44336;
-        }
-        #stopBtn:hover {
-            background-color: #d32f2f;
-        }
-        #toggleBtn:disabled, #stopBtn:disabled {
-            background-color: #cccccc !important;
-            cursor: not-allowed;
-        }
         .status-container {
             margin-top: 20px;
             padding: 10px;
@@ -216,10 +180,6 @@
         
         <textarea id="scriptInput" placeholder="Script content will appear here after selecting a file..."></textarea>
         
-        <div class="controls">
-            <!-- Removed custom stop button -->
-        </div>
-        
         <div class="status-container">
             <div>
                 <strong>Status:</strong> <span id="statusText">No script loaded</span>
@@ -324,7 +284,6 @@
         clearTimeouts();
         state = State.PAUSED; setUI();
     }
-    // Remove stop, showVideoStopBtn, and related event listeners
     el.fileInput.addEventListener('change', e => {
         const files = Array.from(e.target.files);
         if (files.length !== 2) return alert('Please select both a video file and a funscript file together.'), el.fileInput.value = '', el.fileName.textContent = 'No file selected';
