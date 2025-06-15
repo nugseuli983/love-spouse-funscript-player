@@ -238,12 +238,11 @@
             const d = a.at - offset;
             if (d >= 0) timeouts.push(setTimeout(() => {
                 sendAction(a);
-                showActionMarker(a);
             }, d));
         });
     }
 
-    function showActionMarker(action) {
+    function showActionMarker(action, submode) {
         // Remove any previous marker
         let marker = document.getElementById('actionMarker');
         if (marker) marker.remove();
@@ -260,7 +259,7 @@
         marker.style.fontWeight = 'bold';
         marker.style.fontSize = '18px';
         marker.style.zIndex = 10;
-        marker.textContent = `pos=${action.pos}, at=${action.at}`;
+        marker.textContent = `pos=${action.pos}, at=${action.at}, submode=${submode}`;
         el.video.parentElement.appendChild(marker);
         setTimeout(() => { marker.remove(); }, 400);
     }
@@ -270,7 +269,8 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ mode: el.toyMode.value, submode, duration: 0.05 })
-        });
+        });       
+        showActionMarker(a, submode);
     }
     async function play() {
         if (!videoLoaded || !scriptLoaded) return;
