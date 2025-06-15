@@ -173,30 +173,6 @@
             gap: 10px;
             margin-bottom: 20px;
         }
-        .progress-bar {
-            width: 100%;
-            height: 5px;
-            background-color: #ddd;
-            border-radius: 2px;
-            margin-top: 10px;
-            overflow: hidden;
-        }
-        .progress {
-            height: 100%;
-            background-color: #4CAF50;
-            width: 0%;
-            transition: width 0.3s;
-        }
-        .time-display {
-            position: absolute;
-            bottom: 10px;
-            right: 10px;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
         #actionMarker {
             position: absolute;
             top: 10px;
@@ -236,10 +212,6 @@
         <div class="video-container">
             <div id="noVideoMessage" class="no-video">No video loaded</div>
             <video id="videoPlayer" controls style="display: none;"></video>
-            <div id="timeDisplay" class="time-display" style="display: none;">00:00 / 00:00</div>
-            <div class="progress-bar">
-                <div id="progressBar" class="progress"></div>
-            </div>
         </div>
         
         <textarea id="scriptInput" placeholder="Script content will appear here after selecting a file..."></textarea>
@@ -271,8 +243,6 @@
         fileName: document.getElementById('comboFileName'),
         video: document.getElementById('videoPlayer'),
         noVideo: document.getElementById('noVideoMessage'),
-        progress: document.getElementById('progressBar'),
-        time: document.getElementById('timeDisplay'),
         sync: document.getElementById('syncIndicator')
     };
     const State = { NO_SCRIPT: 0, LOADED: 1, PLAYING: 2, PAUSED: 3 };
@@ -297,19 +267,9 @@
         el.video.style.display = 'none';
         el.noVideo.style.display = 'flex';
         el.video.src = '';
-        el.progress.style.width = '0%';
-        el.time.style.display = 'none';
         state = State.NO_SCRIPT;
         videoLoaded = scriptLoaded = false;
         setUI();
-    }
-    function fmtTime(s) {
-        const m = Math.floor(s/60), sec = Math.floor(s%60);
-        return `${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
-    }
-    function updateTime() {
-        if (videoLoaded && el.video.duration)
-            el.time.textContent = `${fmtTime(el.video.currentTime)} / ${fmtTime(el.video.duration)}`;
     }
     function clearTimeouts() { timeouts.forEach(clearTimeout); timeouts = []; }
     function scheduleActions(offset = 0) {
@@ -378,7 +338,7 @@
         el.video.src = URL.createObjectURL(v);
         el.video.style.display = 'block';
         el.noVideo.style.display = 'none';
-        el.time.style.display = 'block';
+        el.video.currentTime = 0;
         videoLoaded = true;
         log(`Video "${v.name}" loaded`,'success');
         const r = new FileReader();
@@ -409,12 +369,6 @@
     el.video.addEventListener('ended', () => {
         clearTimeouts();
         state = State.LOADED; setUI();
-    });
-    el.video.addEventListener('timeupdate', () => {
-        if (videoLoaded && el.video.duration) {
-            el.progress.style.width = `${(el.video.currentTime/el.video.duration)*100}%`;
-            updateTime();
-        }
     });
     el.video.addEventListener('seeked', () => {
         if (state === State.PLAYING) {
