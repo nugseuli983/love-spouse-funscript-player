@@ -197,6 +197,18 @@
             border-radius: 4px;
             font-size: 14px;
         }
+        #actionMarker {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 193, 7, 0.95);
+            color: #222;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 18px;
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -313,8 +325,33 @@
         clearTimeouts();
         funscript.forEach(a => {
             const d = a.at - offset;
-            if (d >= 0) timeouts.push(setTimeout(() => sendAction(a), d));
+            if (d >= 0) timeouts.push(setTimeout(() => {
+                sendAction(a);
+                showActionMarker(a);
+            }, d));
         });
+    }
+
+    function showActionMarker(action) {
+        // Remove any previous marker
+        let marker = document.getElementById('actionMarker');
+        if (marker) marker.remove();
+        // Create a new marker
+        marker = document.createElement('div');
+        marker.id = 'actionMarker';
+        marker.style.position = 'absolute';
+        marker.style.top = '10px';
+        marker.style.right = '10px';
+        marker.style.background = 'rgba(255, 193, 7, 0.95)';
+        marker.style.color = '#222';
+        marker.style.padding = '8px 16px';
+        marker.style.borderRadius = '8px';
+        marker.style.fontWeight = 'bold';
+        marker.style.fontSize = '18px';
+        marker.style.zIndex = 10;
+        marker.textContent = `Action: pos=${action.pos}`;
+        el.video.parentElement.appendChild(marker);
+        setTimeout(() => { marker.remove(); }, 400);
     }
     function sendAction(a) {
         const pos = a.pos || 0, submode = Math.min(9, Math.max(0, Math.floor(pos/11)));
