@@ -340,7 +340,7 @@
         marker.style.fontWeight = 'bold';
         marker.style.fontSize = '18px';
         marker.style.zIndex = 10;
-        marker.textContent = `Action: pos=${action.pos}`;
+        marker.textContent = `pos=${action.pos}, at=${action.at}`;
         el.video.parentElement.appendChild(marker);
         setTimeout(() => { marker.remove(); }, 400);
     }
