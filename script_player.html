@@ -245,7 +245,6 @@
         <textarea id="scriptInput" placeholder="Script content will appear here after selecting a file..."></textarea>
         
         <div class="controls">
-            <button id="toggleBtn" class="play" disabled>▶</button>
             <button id="stopBtn" disabled>⏹</button>
         </div>
         
@@ -266,7 +265,6 @@
     const el = {
         scriptInput: document.getElementById('scriptInput'),
         toyMode: document.getElementById('toyMode'),
-        playBtn: document.getElementById('toggleBtn'),
         stopBtn: document.getElementById('stopBtn'),
         status: document.getElementById('statusText'),
         log: document.getElementById('logContainer'),
@@ -289,14 +287,9 @@
         el.log.scrollTop = el.log.scrollHeight;
     }
     function setUI() {
-        const s = [
-            {d:true,t:'▶',c:'play',s:true},
-            {d:false,t:'▶',c:'play',s:false},
-            {d:false,t:'⏸',c:'pause',s:false},
-            {d:false,t:'▶',c:'play',s:false}
-        ][state];
-        el.playBtn.disabled = s.d; el.playBtn.textContent = s.t; el.playBtn.className = s.c;
-        el.stopBtn.disabled = s.s; el.status.textContent = Object.keys(State)[state].replace('_',' ');
+        // Only update stop button and status
+        el.stopBtn.disabled = state === State.NO_SCRIPT || state === State.LOADED;
+        el.status.textContent = Object.keys(State)[state].replace('_',' ');
         el.sync.classList.toggle('active', state === State.PLAYING);
     }
     function resetUI() {
@@ -374,7 +367,7 @@
         state = State.PAUSED; setUI();
     }
     function stop() {
-        el.playBtn.disabled = el.stopBtn.disabled = true;
+        el.stopBtn.disabled = true;
         if (videoLoaded) { el.video.pause(); el.video.currentTime = 0; }
         clearTimeouts();
         state = State.LOADED; setUI();
@@ -410,12 +403,16 @@
         r.readAsText(s);
     });
     el.video.addEventListener('play', () => {
-        if (state === State.PAUSED) {
-            scheduleActions(el.video.currentTime * 1000);
-            state = State.PLAYING; setUI();
-        } else if (state === State.LOADED) play();
+        if (!videoLoaded || !scriptLoaded) return;
+        scheduleActions(el.video.currentTime * 1000);
+        state = State.PLAYING; setUI();
     });
-    el.video.addEventListener('pause', () => { if (state === State.PLAYING) pause(); });
+    el.video.addEventListener('pause', () => {
+        if (state === State.PLAYING) {
+            clearTimeouts();
+            state = State.PAUSED; setUI();
+        }
+    });
     el.video.addEventListener('ended', stop);
     el.video.addEventListener('timeupdate', () => {
         if (videoLoaded && el.video.duration) {
@@ -430,7 +427,6 @@
             clearTimeouts();
         }
     });
-    el.playBtn.addEventListener('click', () => { state === State.PLAYING ? pause() : play(); });
     el.stopBtn.addEventListener('click', stop);
     setUI();
     </script>
