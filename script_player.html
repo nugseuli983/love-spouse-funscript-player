@@ -267,7 +267,7 @@
         sync: document.getElementById('syncIndicator')
     };
     const State = { NO_SCRIPT: 0, LOADED: 1, PLAYING: 2, PAUSED: 3 };
-    let state = State.NO_SCRIPT, videoLoaded = false, scriptLoaded = false, funscript = [], timeouts = [], playStart = 0, pausedAt = 0, isPaused = false;
+    let state = State.NO_SCRIPT, videoLoaded = false, scriptLoaded = false, funscript = [], timeouts = [];
 
     function log(msg, type = '') {
         const e = document.createElement('div');
@@ -327,16 +327,12 @@
     async function play() {
         if (!videoLoaded || !scriptLoaded) return;
         try { await el.video.play(); } catch(e){ log(`Error playing video: ${e.message}`,'error'); }
-        playStart = el.video.currentTime * 1000;
-        isPaused = false;
-        scheduleActions(playStart);
+        scheduleActions(el.video.currentTime * 1000);
         state = State.PLAYING; setUI();
     }
     function pause() {
         if (!videoLoaded || !scriptLoaded) return;
         el.video.pause();
-        pausedAt = el.video.currentTime * 1000;
-        isPaused = true;
         clearTimeouts();
         state = State.PAUSED; setUI();
     }
@@ -344,7 +340,6 @@
         el.playBtn.disabled = el.stopBtn.disabled = true;
         if (videoLoaded) { el.video.pause(); el.video.currentTime = 0; }
         clearTimeouts();
-        isPaused = false;
         state = State.LOADED; setUI();
     }
     el.fileInput.addEventListener('change', e => {
@@ -378,8 +373,10 @@
         r.readAsText(s);
     });
     el.video.addEventListener('play', () => {
-        if (isPaused) { playStart = pausedAt; scheduleActions(playStart); isPaused = false; state = State.PLAYING; setUI(); }
-        else if (state === State.LOADED) play();
+        if (state === State.PAUSED) {
+            scheduleActions(el.video.currentTime * 1000);
+            state = State.PLAYING; setUI();
+        } else if (state === State.LOADED) play();
     });
     el.video.addEventListener('pause', () => { if (state === State.PLAYING) pause(); });
     el.video.addEventListener('ended', stop);
@@ -387,6 +384,13 @@
         if (videoLoaded && el.video.duration) {
             el.progress.style.width = `${(el.video.currentTime/el.video.duration)*100}%`;
             updateTime();
+        }
+    });
+    el.video.addEventListener('seeked', () => {
+        if (state === State.PLAYING) {
+            scheduleActions(el.video.currentTime * 1000);
+        } else if (state === State.PAUSED) {
+            clearTimeouts();
         }
     });
     el.playBtn.addEventListener('click', () => { state === State.PLAYING ? pause() : play(); });
