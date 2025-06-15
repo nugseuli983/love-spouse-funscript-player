@@ -1,4 +1,4 @@
-# LoveSpouse Script Player (for window)
+# LoveSpouse Script Player (for Window)
 
 A minimal web-based player for funscript files with video synchronization and BLE toy control.
 
