@@ -285,6 +285,7 @@
         state = State.PAUSED; setUI();
     }
     el.fileInput.addEventListener('change', e => {
+        clearTimeouts(); // Clean up any previous setTimeouts immediately
         const files = Array.from(e.target.files);
         if (files.length !== 2) return alert('Please select both a video file and a funscript file together.'), el.fileInput.value = '', el.fileName.textContent = 'No file selected';
         let v = null, s = null;
